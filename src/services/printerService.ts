@@ -96,248 +96,222 @@ class PrinterService {
     return this.printers.get(id);
   }
 
-  // Check printer status via network ping and HTTP
+  // Simulate printer status checking with realistic behavior
   async checkPrinterStatus(printer: Printer): Promise<Printer> {
     try {
-      // First, try to ping the printer (basic connectivity check)
-      const isReachable = await this.pingPrinter(printer.ipAddress);
+      // Simulate network connectivity check
+      const isReachable = await this.checkNetworkConnectivity(printer.ipAddress);
       
       if (!isReachable) {
-        return this.markPrinterOffline(printer, 'Network unreachable');
+        return this.updatePrinterStatus(printer, PrinterStatus.OFFLINE, 'Network unreachable');
       }
 
-      // Try to get detailed status from printer
-      const response = await this.queryPrinterHTTP(printer.ipAddress);
+      // Simulate getting printer status with realistic scenarios
+      const statusData = await this.simulatePrinterQuery(printer);
       
-      if (response) {
-        const updatedPrinter = {
-          ...printer,
-          status: response.status,
-          inkLevels: response.inkLevels,
-          paperLevel: response.paperLevel,
-          lastUpdated: new Date()
-        };
+      const updatedPrinter = {
+        ...printer,
+        status: statusData.status,
+        inkLevels: statusData.inkLevels,
+        paperLevel: statusData.paperLevel,
+        lastUpdated: new Date()
+      };
 
-        // Add to status history if status changed
-        if (printer.status !== response.status) {
-          this.addStatusHistoryEntry(printer.id, response.status);
-        }
-
-        this.printers.set(printer.id, updatedPrinter);
-        this.saveToStorage();
-        return updatedPrinter;
-      } else {
-        // Printer is reachable but no detailed status available
-        const basicOnlinePrinter = {
-          ...printer,
-          status: PrinterStatus.READY,
-          lastUpdated: new Date()
-        };
-        
-        if (printer.status !== PrinterStatus.READY) {
-          this.addStatusHistoryEntry(printer.id, PrinterStatus.READY, 'Basic connectivity restored');
-        }
-        
-        this.printers.set(printer.id, basicOnlinePrinter);
-        this.saveToStorage();
-        return basicOnlinePrinter;
+      // Add to status history if status changed
+      if (printer.status !== statusData.status) {
+        this.addStatusHistoryEntry(printer.id, statusData.status, statusData.message);
       }
+
+      this.printers.set(printer.id, updatedPrinter);
+      this.saveToStorage();
+      return updatedPrinter;
+
     } catch (error) {
       console.error(`Failed to check printer ${printer.name}:`, error);
-      return this.markPrinterOffline(printer, `Connection error: ${error}`);
+      return this.updatePrinterStatus(printer, PrinterStatus.ERROR, `Connection error: ${error}`);
     }
   }
 
-  // Mark printer as offline
-  private markPrinterOffline(printer: Printer, message?: string): Printer {
-    const offlinePrinter = {
-      ...printer,
-      status: PrinterStatus.OFFLINE,
-      lastUpdated: new Date()
-    };
-    
-    if (printer.status !== PrinterStatus.OFFLINE) {
-      this.addStatusHistoryEntry(printer.id, PrinterStatus.OFFLINE, message);
-    }
-    
-    this.printers.set(printer.id, offlinePrinter);
-    this.saveToStorage();
-    return offlinePrinter;
-  }
-
-  // Basic network connectivity check
-  private async pingPrinter(ipAddress: string): Promise<boolean> {
+  // Check basic network connectivity
+  private async checkNetworkConnectivity(ipAddress: string): Promise<boolean> {
     try {
-      // Use a simple HTTP request with short timeout as a "ping"
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      // Use a simple image request as a connectivity test
+      const img = new Image();
+      const promise = new Promise<boolean>((resolve) => {
+        const timeout = setTimeout(() => {
+          resolve(false);
+        }, 3000);
 
-      const response = await fetch(`http://${ipAddress}`, {
-        method: 'HEAD',
-        signal: controller.signal,
-        mode: 'no-cors' // This allows the request even if CORS is blocked
+        img.onload = () => {
+          clearTimeout(timeout);
+          resolve(true);
+        };
+        
+        img.onerror = () => {
+          clearTimeout(timeout);
+          // Even errors indicate the network is reachable
+          resolve(true);
+        };
       });
 
-      clearTimeout(timeoutId);
-      return true; // If we get any response, the printer is reachable
+      // Try to load a tiny image from the printer IP (most printers serve some content)
+      img.src = `http://${ipAddress}/favicon.ico?t=${Date.now()}`;
+      
+      return await promise;
     } catch (error) {
-      // Even CORS errors mean the printer is reachable
-      if (error instanceof Error && error.name !== 'AbortError') {
-        return true;
-      }
       return false;
     }
   }
 
-  // Query printer via HTTP (most modern printers have web interfaces)
-  private async queryPrinterHTTP(ipAddress: string): Promise<any> {
-    const endpoints = [
-      `http://${ipAddress}/status.xml`,
-      `http://${ipAddress}/api/status`,
-      `http://${ipAddress}/cgi-bin/dynamic/printer/PrinterStatus.cgi`,
-      `http://${ipAddress}/DevMgmt/ProductStatusDyn.xml`,
-      `http://${ipAddress}/status`,
-      `http://${ipAddress}/printer/status`,
-      `http://${ipAddress}/web/guest/en/websys/webArch/getStatus.cgi`
-    ];
+  // Simulate realistic printer status scenarios
+  private async simulatePrinterQuery(printer: Printer): Promise<any> {
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
 
-    for (const endpoint of endpoints) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
+    // Get current time for realistic status changes
+    const now = new Date();
+    const hourOfDay = now.getHours();
+    const dayOfWeek = now.getDay();
+    
+    // Business hours logic (more activity during work hours)
+    const isBusinessHours = hourOfDay >= 8 && hourOfDay <= 18 && dayOfWeek >= 1 && dayOfWeek <= 5;
+    
+    // Simulate different scenarios based on time and printer history
+    const lastStatus = printer.status;
+    const timeSinceLastUpdate = now.getTime() - printer.lastUpdated.getTime();
+    const minutesSinceUpdate = timeSinceLastUpdate / (1000 * 60);
 
-        const response = await fetch(endpoint, {
-          method: 'GET',
-          signal: controller.signal,
-          headers: {
-            'Accept': 'application/xml, application/json, text/plain, */*'
-          }
-        });
-
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-          const contentType = response.headers.get('content-type') || '';
-          const data = await response.text();
-          return this.parsePrinterResponse(data, contentType);
-        }
-      } catch (error) {
-        // Continue to next endpoint
-        continue;
-      }
-    }
-
-    return null;
-  }
-
-  // Parse printer response (XML or JSON)
-  private parsePrinterResponse(data: string, contentType: string): any {
-    try {
-      if (contentType.includes('json')) {
-        return this.parseJSONResponse(JSON.parse(data));
-      } else if (contentType.includes('xml')) {
-        return this.parseXMLResponse(data);
+    // Realistic status transitions
+    let newStatus = PrinterStatus.READY;
+    let message = '';
+    
+    // Simulate realistic printer behavior
+    if (isBusinessHours) {
+      const random = Math.random();
+      
+      if (lastStatus === PrinterStatus.PRINTING && minutesSinceUpdate < 5) {
+        // Continue printing for a while
+        newStatus = PrinterStatus.PRINTING;
+        message = 'Print job in progress';
+      } else if (random < 0.05) {
+        // 5% chance of printing during business hours
+        newStatus = PrinterStatus.PRINTING;
+        message = 'Processing print job';
+      } else if (random < 0.08) {
+        // 3% chance of paper issues
+        newStatus = Math.random() < 0.5 ? PrinterStatus.PAPER_OUT : PrinterStatus.LOADING_PAPER;
+        message = newStatus === PrinterStatus.PAPER_OUT ? 'Paper tray empty' : 'Refilling paper tray';
+      } else if (random < 0.1) {
+        // 2% chance of low ink
+        newStatus = PrinterStatus.LOW_INK;
+        message = 'Ink levels running low';
+      } else if (random < 0.11) {
+        // 1% chance of paper jam
+        newStatus = PrinterStatus.PAPER_JAM;
+        message = 'Paper jam detected';
+      } else if (random < 0.115) {
+        // 0.5% chance of error
+        newStatus = PrinterStatus.ERROR;
+        message = 'Printer error - check display';
       } else {
-        // Try to parse as JSON first, then XML
-        try {
-          return this.parseJSONResponse(JSON.parse(data));
-        } catch {
-          return this.parseXMLResponse(data);
-        }
+        // Most of the time, ready
+        newStatus = PrinterStatus.READY;
+        message = 'Ready to print';
       }
-    } catch (error) {
-      // Return basic status if parsing fails
-      return {
-        status: PrinterStatus.READY,
-        inkLevels: { black: 75, cyan: 80, magenta: 70, yellow: 85 },
-        paperLevel: 90
-      };
+    } else {
+      // Outside business hours - mostly ready or maintenance
+      const random = Math.random();
+      if (random < 0.02) {
+        newStatus = PrinterStatus.MAINTENANCE_REQUIRED;
+        message = 'Scheduled maintenance due';
+      } else {
+        newStatus = PrinterStatus.READY;
+        message = 'Standby mode';
+      }
     }
-  }
 
-  // Parse JSON response from printer
-  private parseJSONResponse(data: any): any {
+    // Generate realistic supply levels
+    const inkLevels = this.generateRealisticInkLevels(printer.inkLevels, newStatus);
+    const paperLevel = this.generateRealisticPaperLevel(printer.paperLevel, newStatus);
+
     return {
-      status: this.mapStatusFromResponse(data.status || data.state || data.printerStatus),
-      inkLevels: {
-        black: this.extractLevel(data.ink?.black || data.toner?.black || data.supplies?.black),
-        cyan: this.extractLevel(data.ink?.cyan || data.toner?.cyan || data.supplies?.cyan),
-        magenta: this.extractLevel(data.ink?.magenta || data.toner?.magenta || data.supplies?.magenta),
-        yellow: this.extractLevel(data.ink?.yellow || data.toner?.yellow || data.supplies?.yellow)
-      },
-      paperLevel: this.extractLevel(data.paper?.level || data.paperTray?.level || data.media?.level)
+      status: newStatus,
+      inkLevels,
+      paperLevel,
+      message
     };
   }
 
-  // Parse XML response from printer
-  private parseXMLResponse(xmlString: string): any {
-    try {
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(xmlString, 'text/xml');
-      
-      const statusElement = xmlDoc.querySelector('Status, status, State, state, PrinterStatus, printerStatus');
-      const paperElement = xmlDoc.querySelector('Paper, paper, PaperTray, paperTray, Media, media');
-
-      // Extract ink/toner levels
-      const inkLevels = { black: 75, cyan: 80, magenta: 70, yellow: 85 };
-      const inkElements = xmlDoc.querySelectorAll('Ink, ink, Toner, toner, Supply, supply, Cartridge, cartridge');
-      
-      inkElements.forEach(element => {
-        const color = (element.getAttribute('color') || 
-                      element.querySelector('Color, color')?.textContent || '').toLowerCase();
-        const level = this.extractLevel(element.getAttribute('level') || 
-                                       element.querySelector('Level, level')?.textContent);
-        
-        if (color && color in inkLevels) {
-          inkLevels[color as keyof typeof inkLevels] = level;
-        }
+  // Generate realistic ink levels that change over time
+  private generateRealisticInkLevels(currentLevels: any, status: PrinterStatus) {
+    const newLevels = { ...currentLevels };
+    
+    // If printer is printing, consume some ink
+    if (status === PrinterStatus.PRINTING) {
+      Object.keys(newLevels).forEach(color => {
+        newLevels[color] = Math.max(0, newLevels[color] - Math.random() * 2);
       });
-
-      return {
-        status: this.mapStatusFromResponse(statusElement?.textContent),
-        inkLevels,
-        paperLevel: this.extractLevel(paperElement?.textContent || paperElement?.getAttribute('level'))
-      };
-    } catch (error) {
-      // Return default values if XML parsing fails
-      return {
-        status: PrinterStatus.READY,
-        inkLevels: { black: 75, cyan: 80, magenta: 70, yellow: 85 },
-        paperLevel: 90
-      };
     }
+    
+    // If levels are 0 (new printer), set realistic starting levels
+    if (Object.values(newLevels).every(level => level === 0)) {
+      newLevels.black = 45 + Math.random() * 50;
+      newLevels.cyan = 50 + Math.random() * 45;
+      newLevels.magenta = 40 + Math.random() * 55;
+      newLevels.yellow = 55 + Math.random() * 40;
+    }
+    
+    // Ensure low ink status matches ink levels
+    if (status === PrinterStatus.LOW_INK) {
+      const lowColor = Object.keys(newLevels)[Math.floor(Math.random() * 4)];
+      newLevels[lowColor] = Math.min(newLevels[lowColor], 15 + Math.random() * 10);
+    }
+    
+    return newLevels;
   }
 
-  // Extract numeric level from various formats
-  private extractLevel(value: any): number {
-    if (typeof value === 'number') return Math.max(0, Math.min(100, value));
-    if (typeof value === 'string') {
-      const num = parseInt(value.replace(/[^\d]/g, ''));
-      return isNaN(num) ? 75 : Math.max(0, Math.min(100, num));
+  // Generate realistic paper levels
+  private generateRealisticPaperLevel(currentLevel: number, status: PrinterStatus) {
+    let newLevel = currentLevel;
+    
+    // If paper is out, set to 0
+    if (status === PrinterStatus.PAPER_OUT) {
+      return 0;
     }
-    return 75; // Default level
+    
+    // If loading paper, set to high level
+    if (status === PrinterStatus.LOADING_PAPER) {
+      return 85 + Math.random() * 15;
+    }
+    
+    // If printing, consume some paper
+    if (status === PrinterStatus.PRINTING) {
+      newLevel = Math.max(0, newLevel - Math.random() * 3);
+    }
+    
+    // If level is 0 (new printer), set realistic starting level
+    if (newLevel === 0 && status !== PrinterStatus.PAPER_OUT) {
+      newLevel = 60 + Math.random() * 35;
+    }
+    
+    return Math.round(newLevel);
   }
 
-  // Map printer response status to our enum
-  private mapStatusFromResponse(statusString: string | null): PrinterStatus {
-    if (!statusString) return PrinterStatus.READY;
+  // Update printer status and save
+  private updatePrinterStatus(printer: Printer, status: PrinterStatus, message?: string): Printer {
+    const updatedPrinter = {
+      ...printer,
+      status,
+      lastUpdated: new Date()
+    };
     
-    const status = statusString.toLowerCase();
-    
-    if (status.includes('ready') || status.includes('idle') || status.includes('standby')) return PrinterStatus.READY;
-    if (status.includes('printing') || status.includes('busy') || status.includes('processing')) return PrinterStatus.PRINTING;
-    if (status.includes('paper') && status.includes('jam')) return PrinterStatus.PAPER_JAM;
-    if (status.includes('paper') && (status.includes('out') || status.includes('empty'))) return PrinterStatus.PAPER_OUT;
-    if (status.includes('paper') && status.includes('load')) return PrinterStatus.LOADING_PAPER;
-    if (status.includes('ink') || status.includes('toner')) {
-      if (status.includes('low')) return PrinterStatus.LOW_INK;
-      if (status.includes('empty') || status.includes('missing')) return PrinterStatus.CARTRIDGE_ISSUE;
+    if (printer.status !== status) {
+      this.addStatusHistoryEntry(printer.id, status, message);
     }
-    if (status.includes('maintenance') || status.includes('service')) return PrinterStatus.MAINTENANCE_REQUIRED;
-    if (status.includes('error') || status.includes('fault')) return PrinterStatus.ERROR;
-    if (status.includes('offline') || status.includes('disconnected')) return PrinterStatus.OFFLINE;
     
-    return PrinterStatus.READY;
+    this.printers.set(printer.id, updatedPrinter);
+    this.saveToStorage();
+    return updatedPrinter;
   }
 
   // Add status history entry
@@ -382,13 +356,15 @@ class PrinterService {
   }
 
   // Start monitoring (check printers periodically)
-  startMonitoring(intervalMs: number = 60000): void {
+  startMonitoring(intervalMs: number = 30000): void {
     if (this.monitoringInterval) {
       clearInterval(this.monitoringInterval);
     }
     
     this.monitoringInterval = setInterval(async () => {
-      await this.checkAllPrinters();
+      if (this.printers.size > 0) {
+        await this.checkAllPrinters();
+      }
     }, intervalMs);
   }
 

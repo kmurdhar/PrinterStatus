@@ -25,7 +25,7 @@ export const Dashboard: React.FC = () => {
     
     // Start automatic monitoring after a short delay
     const timer = setTimeout(() => {
-      printerService.startMonitoring(60000); // Check every 60 seconds
+      printerService.startMonitoring(30000); // Check every 30 seconds
     }, 2000);
     
     return () => {
@@ -40,7 +40,7 @@ export const Dashboard: React.FC = () => {
       if (printers.length > 0) {
         loadPrinters();
       }
-    }, 60000);
+    }, 30000);
 
     return () => clearInterval(interval);
   }, [printers.length]);

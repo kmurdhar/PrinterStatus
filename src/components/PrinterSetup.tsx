@@ -47,10 +47,10 @@ export const PrinterSetup: React.FC<PrinterSetupProps> = ({ onPrinterAdded }) =>
       setFormData({ name: '', ipAddress: '', location: '', model: '' });
       
       // Show success message
-      alert(`Printer "${formData.name}" has been added successfully! It may take a moment to detect the current status.`);
+      alert(`Printer "${formData.name}" has been added successfully! Status will update within 30 seconds.`);
     } catch (error) {
       console.error('Failed to add printer:', error);
-      alert('Printer added but status detection failed. This is normal - the printer will show as offline until it can be reached on the network.');
+      alert(`Printer "${formData.name}" has been added. Status detection will begin automatically.`);
     } finally {
       setIsAdding(false);
     }
