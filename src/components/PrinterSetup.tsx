@@ -168,10 +168,12 @@ export const PrinterSetup: React.FC<PrinterSetupProps> = ({ onPrinterAdded }) =>
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <h4 className="text-sm font-medium text-blue-900 mb-2">Setup Instructions:</h4>
             <ul className="text-sm text-blue-800 space-y-1">
-              <li>• Ensure the printer is connected to your network</li>
-              <li>• Find the printer's IP address from its settings menu</li>
-              <li>• Make sure the printer's web interface is enabled</li>
-              <li>• Test connectivity by visiting http://[IP] in your browser</li>
+              <li>• Ensure printer is on the same network as this device</li>
+              <li>• Find IP address: Printer Menu → Network → TCP/IP Settings</li>
+              <li>• Enable web interface in printer network settings</li>
+              <li>• Test: Open http://[printer-ip] in browser</li>
+              <li>• For HP: Enable "Embedded Web Server"</li>
+              <li>• For Canon: Enable "HTTP Server"</li>
             </ul>
           </div>
         </div>

@@ -48,18 +48,22 @@ export const Dashboard: React.FC = () => {
   const loadPrinters = async () => {
     try {
       setError(null);
+      console.log('Loading printers...');
       const currentPrinters = printerService.getAllPrinters();
+      console.log(`Found ${currentPrinters.length} configured printers`);
       setPrinters(currentPrinters);
       
       if (currentPrinters.length > 0) {
-        // Check status of all printers
+        console.log('Checking status of all printers...');
         const updatedPrinters = await printerService.checkAllPrinters();
+        console.log('Status check completed');
         setPrinters(updatedPrinters);
       }
       
       setLastRefresh(new Date());
     } catch (err) {
-      setError('Failed to load printer status. This may be due to network restrictions or printer configuration.');
+      const errorMessage = 'Failed to detect printer status. This may be due to:\n• Network restrictions (CORS policy)\n• Printer web interface disabled\n• Firewall blocking connections\n• Printer not on same network';
+      setError(errorMessage);
       console.error('Error loading printers:', err);
     }
   };
