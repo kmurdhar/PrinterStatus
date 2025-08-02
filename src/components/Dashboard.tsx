@@ -22,18 +22,28 @@ export const Dashboard: React.FC = () => {
   // Load printers on component mount
   useEffect(() => {
     loadPrinters();
-    // Start automatic monitoring
-    printerService.startMonitoring(60000); // Check every 60 seconds
+    
+    // Start automatic monitoring after a short delay
+    const timer = setTimeout(() => {
+      printerService.startMonitoring(60000); // Check every 60 seconds
+    }, 2000);
+    
+    return () => {
+      clearTimeout(timer);
+      printerService.stopMonitoring();
+    };
   }, []);
 
   // Auto-refresh every 60 seconds
   useEffect(() => {
     const interval = setInterval(() => {
-      loadPrinters();
+      if (printers.length > 0) {
+        loadPrinters();
+      }
     }, 60000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [printers.length]);
 
   const loadPrinters = async () => {
     try {
@@ -49,7 +59,7 @@ export const Dashboard: React.FC = () => {
       
       setLastRefresh(new Date());
     } catch (err) {
-      setError('Failed to load printer status. Please check your network connection.');
+      setError('Failed to load printer status. This may be due to network restrictions or printer configuration.');
       console.error('Error loading printers:', err);
     }
   };

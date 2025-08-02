@@ -21,6 +21,14 @@ export const PrinterSetup: React.FC<PrinterSetupProps> = ({ onPrinterAdded }) =>
     setIsAdding(true);
 
     try {
+      // Validate IP address format
+      const ipRegex = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/;
+      if (!ipRegex.test(formData.ipAddress)) {
+        alert('Please enter a valid IP address (e.g., 192.168.1.100)');
+        setIsAdding(false);
+        return;
+      }
+
       const config: PrinterConfig = {
         ...formData,
         id: `printer_${Date.now()}`
@@ -37,9 +45,12 @@ export const PrinterSetup: React.FC<PrinterSetupProps> = ({ onPrinterAdded }) =>
       onPrinterAdded();
       setIsOpen(false);
       setFormData({ name: '', ipAddress: '', location: '', model: '' });
+      
+      // Show success message
+      alert(`Printer "${formData.name}" has been added successfully! It may take a moment to detect the current status.`);
     } catch (error) {
       console.error('Failed to add printer:', error);
-      alert('Failed to add printer. Please check the IP address and try again.');
+      alert('Printer added but status detection failed. This is normal - the printer will show as offline until it can be reached on the network.');
     } finally {
       setIsAdding(false);
     }
