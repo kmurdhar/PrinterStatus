@@ -1,53 +1,67 @@
 import React, { useState, useEffect } from 'react';
 import { Printer, PrinterStatus } from '../types/printer';
-import { mockPrinters } from '../data/mockData';
+import { printerService } from '../services/printerService';
 import { PrinterCard } from './PrinterCard';
 import { PrinterModal } from './PrinterModal';
 import { StatusFilter } from './StatusFilter';
 import { SearchBar } from './SearchBar';
+import { PrinterSetup } from './PrinterSetup';
 import { getStatusConfig } from '../utils/printerUtils';
-import { RefreshCw, Activity } from 'lucide-react';
+import { RefreshCw, Activity, AlertCircle } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
-  const [printers, setPrinters] = useState<Printer[]>(mockPrinters);
+  const [printers, setPrinters] = useState<Printer[]>([]);
   const [selectedPrinter, setSelectedPrinter] = useState<Printer | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatuses, setSelectedStatuses] = useState<PrinterStatus[]>([]);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load printers on component mount
+  useEffect(() => {
+    loadPrinters();
+    // Start automatic monitoring
+    printerService.startMonitoring(60000); // Check every 60 seconds
+  }, []);
 
   // Auto-refresh every 60 seconds
   useEffect(() => {
     const interval = setInterval(() => {
-      handleRefresh();
+      loadPrinters();
     }, 60000);
 
     return () => clearInterval(interval);
   }, []);
 
+  const loadPrinters = async () => {
+    try {
+      setError(null);
+      const currentPrinters = printerService.getAllPrinters();
+      setPrinters(currentPrinters);
+      
+      if (currentPrinters.length > 0) {
+        // Check status of all printers
+        const updatedPrinters = await printerService.checkAllPrinters();
+        setPrinters(updatedPrinters);
+      }
+      
+      setLastRefresh(new Date());
+    } catch (err) {
+      setError('Failed to load printer status. Please check your network connection.');
+      console.error('Error loading printers:', err);
+    }
+  };
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Update timestamps and potentially change some statuses
-    const updatedPrinters = printers.map(printer => ({
-      ...printer,
-      lastUpdated: new Date(),
-      // Randomly update some printer statuses for demo
-      status: Math.random() > 0.8 ? getRandomStatus() : printer.status
-    }));
-    
-    setPrinters(updatedPrinters);
-    setLastRefresh(new Date());
+    await loadPrinters();
     setIsRefreshing(false);
   };
 
-  const getRandomStatus = (): PrinterStatus => {
-    const statuses = Object.values(PrinterStatus);
-    return statuses[Math.floor(Math.random() * statuses.length)];
+  const handlePrinterAdded = () => {
+    loadPrinters();
   };
 
   const handlePrinterClick = (printer: Printer) => {
@@ -102,19 +116,32 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
             
-            <button
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span>Refresh</span>
-            </button>
+            <div className="flex items-center space-x-3">
+              <PrinterSetup onPrinterAdded={handlePrinterAdded} />
+              <button
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="flex items-center space-x-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
+              <span className="text-red-800">{error}</span>
+            </div>
+          </div>
+        )}
+
         {/* Summary Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -155,42 +182,57 @@ export const Dashboard: React.FC = () => {
         </div>
 
         {/* Search and Filters */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <div className="lg:col-span-2">
-            <SearchBar searchTerm={searchTerm} onSearchChange={setSearchTerm} />
-          </div>
-          <div>
-            <StatusFilter 
-              selectedStatuses={selectedStatuses}
-              onStatusToggle={handleStatusToggle}
-              statusCounts={statusCounts}
-            />
-          </div>
-        </div>
-
-        {/* Printer Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredPrinters.map((printer) => (
-            <PrinterCard
-              key={printer.id}
-              printer={printer}
-              onClick={handlePrinterClick}
-            />
-          ))}
-        </div>
-
-        {filteredPrinters.length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-gray-400 text-6xl mb-4">🖨️</div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No printers found</h3>
-            <p className="text-gray-500">Try adjusting your search or filter criteria.</p>
+        {printers.length > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <div className="lg:col-span-2">
+              <SearchBar searchTerm={searchTerm} onSearchChange={setSearchTerm} />
+            </div>
+            <div>
+              <StatusFilter 
+                selectedStatuses={selectedStatuses}
+                onStatusToggle={handleStatusToggle}
+                statusCounts={statusCounts}
+              />
+            </div>
           </div>
         )}
 
+        {/* Printer Grid */}
+        {printers.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-gray-400 text-6xl mb-4">🖨️</div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No printers configured</h3>
+            <p className="text-gray-500 mb-4">Add your first printer to start monitoring.</p>
+            <PrinterSetup onPrinterAdded={handlePrinterAdded} />
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredPrinters.map((printer) => (
+                <PrinterCard
+                  key={printer.id}
+                  printer={printer}
+                  onClick={handlePrinterClick}
+                />
+              ))}
+            </div>
+
+            {filteredPrinters.length === 0 && printers.length > 0 && (
+              <div className="text-center py-12">
+                <div className="text-gray-400 text-6xl mb-4">🔍</div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No printers match your filters</h3>
+                <p className="text-gray-500">Try adjusting your search or filter criteria.</p>
+              </div>
+            )}
+          </>
+        )}
+
         {/* Last Refresh Info */}
-        <div className="mt-8 text-center text-sm text-gray-500">
-          Last refreshed: {lastRefresh.toLocaleTimeString()} • Auto-refresh every 60 seconds
-        </div>
+        {printers.length > 0 && (
+          <div className="mt-8 text-center text-sm text-gray-500">
+            Last refreshed: {lastRefresh.toLocaleTimeString()} • Auto-refresh every 60 seconds
+          </div>
+        )}
       </div>
 
       {/* Printer Detail Modal */}
