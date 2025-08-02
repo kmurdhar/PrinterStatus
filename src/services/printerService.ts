@@ -337,13 +337,36 @@ class PrinterService {
     // Common JSON patterns from different manufacturers
     const status = data.status || data.printerStatus || data.deviceStatus;
     const supplies = data.supplies || data.consumables || data.ink;
+    const alerts = data.alerts || data.warnings || data.messages || [];
     
     if (status) {
+      // Check for specific alert conditions
+      let detectedStatus = this.mapStatusToEnum(status);
+      
+      // Override status based on alerts/warnings
+      if (Array.isArray(alerts)) {
+        for (const alert of alerts) {
+          const alertText = (alert.message || alert.text || alert.description || '').toLowerCase();
+          if (alertText.includes('paper jam') || alertText.includes('jam')) {
+            detectedStatus = PrinterStatus.PAPER_JAM;
+            break;
+          }
+          if (alertText.includes('load paper') || alertText.includes('paper loading')) {
+            detectedStatus = PrinterStatus.LOADING_PAPER;
+            break;
+          }
+          if (alertText.includes('cartridge') && (alertText.includes('error') || alertText.includes('missing'))) {
+            detectedStatus = PrinterStatus.CARTRIDGE_ISSUE;
+            break;
+          }
+        }
+      }
+      
       return {
-        status: this.mapStatusToEnum(status),
+        status: detectedStatus,
         inkLevels: this.extractInkLevels(supplies),
         paperLevel: this.extractPaperLevel(data),
-        message: data.message || 'Status from JSON API'
+        message: data.message || alerts[0]?.message || 'Status from JSON API'
       };
     }
     
@@ -359,10 +382,13 @@ class PrinterService {
       // Look for common XML status elements
       const statusElements = [
         'PrinterStatus', 'DeviceStatus', 'Status',
-        'dd:PrinterStatus', 'dd:DeviceStatus'
+        'dd:PrinterStatus', 'dd:DeviceStatus',
+        'AlertDescription', 'Message', 'Warning'
       ];
       
       let statusText = '';
+      let alertMessages = [];
+      
       for (const element of statusElements) {
         const node = xmlDoc.querySelector(element);
         if (node) {
@@ -371,12 +397,38 @@ class PrinterService {
         }
       }
       
+      // Check for alert/warning elements
+      const alertElements = xmlDoc.querySelectorAll('Alert, Warning, Message, Error');
+      alertElements.forEach(alert => {
+        const alertText = alert.textContent || '';
+        if (alertText) alertMessages.push(alertText);
+      });
+      
       if (statusText) {
+        let detectedStatus = this.mapStatusToEnum(statusText);
+        
+        // Override based on alert messages
+        for (const alert of alertMessages) {
+          const alertLower = alert.toLowerCase();
+          if (alertLower.includes('paper jam')) {
+            detectedStatus = PrinterStatus.PAPER_JAM;
+            break;
+          }
+          if (alertLower.includes('load paper') || alertLower.includes('paper loading')) {
+            detectedStatus = PrinterStatus.LOADING_PAPER;
+            break;
+          }
+          if (alertLower.includes('cartridge') && (alertLower.includes('error') || alertLower.includes('missing'))) {
+            detectedStatus = PrinterStatus.CARTRIDGE_ISSUE;
+            break;
+          }
+        }
+        
         return {
-          status: this.mapStatusToEnum(statusText),
+          status: detectedStatus,
           inkLevels: this.extractInkLevelsFromXml(xmlDoc),
           paperLevel: this.extractPaperLevelFromXml(xmlDoc),
-          message: 'Status from XML API'
+          message: alertMessages[0] || 'Status from XML API'
         };
       }
     } catch (error) {
@@ -396,19 +448,25 @@ class PrinterService {
       const statusKeywords = {
         ready: ['ready', 'idle', 'online'],
         printing: ['printing', 'busy', 'processing'],
+        loading_paper: ['loading paper', 'paper loading', 'load paper', 'insert paper', 'paper tray', 'refilling'],
+        paper_jam: ['paper jam', 'jam', 'paper stuck', 'paper feed', 'feed error', 'paper path'],
+        paper_out: ['paper out', 'no paper', 'paper empty', 'out of paper', 'paper low'],
+        cartridge_issue: ['cartridge', 'ink cartridge', 'toner cartridge', 'replace cartridge', 'cartridge error', 'cartridge missing', 'install cartridge'],
+        low_ink: ['low ink', 'low toner', 'ink low', 'toner low', 'replace ink', 'replace toner'],
         error: ['error', 'jam', 'problem', 'fault'],
         offline: ['offline', 'disconnected', 'not available']
       };
       
       const bodyText = doc.body?.textContent?.toLowerCase() || '';
       
+      // Check for specific status keywords with priority
       for (const [status, keywords] of Object.entries(statusKeywords)) {
         if (keywords.some(keyword => bodyText.includes(keyword))) {
           return {
             status: this.mapStatusToEnum(status),
-            inkLevels: { black: 50, cyan: 50, magenta: 50, yellow: 50 },
-            paperLevel: 75,
-            message: 'Status from HTML parsing'
+            inkLevels: this.getDefaultInkLevels(status),
+            paperLevel: this.getDefaultPaperLevel(status),
+            message: `Status detected: ${keywords.find(k => bodyText.includes(k))}`
           };
         }
       }
@@ -483,6 +541,32 @@ class PrinterService {
     });
     
     return levels;
+  }
+
+  // Get default ink levels based on status
+  private getDefaultInkLevels(status: string): any {
+    switch (status) {
+      case 'low_ink':
+        return { black: 15, cyan: 20, magenta: 18, yellow: 12 };
+      case 'cartridge_issue':
+        return { black: 0, cyan: 45, magenta: 50, yellow: 40 };
+      default:
+        return { black: 75, cyan: 80, magenta: 70, yellow: 85 };
+    }
+  }
+
+  // Get default paper level based on status
+  private getDefaultPaperLevel(status: string): number {
+    switch (status) {
+      case 'paper_out':
+        return 0;
+      case 'loading_paper':
+        return 25;
+      case 'paper_jam':
+        return 60;
+      default:
+        return 80;
+    }
   }
 
   // Extract paper level from various sources
