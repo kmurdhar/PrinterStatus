@@ -130,51 +130,8 @@ class PrinterService {
         return this.updatePrinterStatus(printer, PrinterStatus.OFFLINE, 'Network unreachable');
       }
 
-      // Try different methods to get printer status
-      let statusData = await this.tryHttpStatusDetection(printer);
-      
-      if (!statusData) {
-        statusData = await this.trySnmpStatusDetection(printer);
-      }
-
-      if (!statusData) {
-        // If we can reach the printer but can't get status, simulate realistic scenarios
-        const simulatedScenarios = [
-          {
-            status: PrinterStatus.ERROR,
-            message: 'Door open - Please close all printer doors and covers',
-            errorCode: '30.01',
-            inkLevels: { black: 75, cyan: 80, magenta: 70, yellow: 85 },
-            paperLevel: 80
-          },
-          {
-            status: PrinterStatus.PAPER_JAM,
-            message: 'Paper jam in input tray - Remove jammed paper',
-            errorCode: '13.01',
-            inkLevels: { black: 60, cyan: 65, magenta: 55, yellow: 70 },
-            paperLevel: 60
-          },
-          {
-            status: PrinterStatus.LOW_INK,
-            message: 'Black ink cartridge low - Replace soon',
-            errorCode: '10.00',
-            inkLevels: { black: 15, cyan: 80, magenta: 70, yellow: 85 },
-            paperLevel: 75
-          },
-          {
-            status: PrinterStatus.READY,
-            message: 'Printer ready for use',
-            errorCode: undefined,
-            inkLevels: { black: 75, cyan: 80, magenta: 70, yellow: 85 },
-            paperLevel: 80
-          }
-        ];
-        
-        // Use printer ID hash for consistent simulation
-        const hash = printer.id.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
-        const scenarioIndex = hash % simulatedScenarios.length;
-        statusData = simulatedScenarios[scenarioIndex];
-      }
+      // Try multiple methods to get real printer status
+      let statusData = await this.tryMultipleDetectionMethods(printer);
 
       const updatedPrinter = {
         ...printer,
