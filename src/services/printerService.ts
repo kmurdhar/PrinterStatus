@@ -704,7 +704,7 @@ class PrinterService {
       },
       {
         status: PrinterStatus.CARTRIDGE_ISSUE,
-        message: 'Replace magenta cartridge',
+        message: 'Install magenta cartridge',
         errorCode: '10.02',
         inkLevels: { black: 60, cyan: 45, magenta: 0, yellow: 40 },
         paperLevel: 75,
@@ -778,7 +778,7 @@ class PrinterService {
       const errorInfo = getErrorCodeInfo(code, printerModel);
       const newError: ErrorCode = {
         code,
-        description: errorInfo?.description || `Unknown error code: ${code}`,
+        description: message || errorInfo?.description || `Error code: ${errorCode}`,
         severity: errorInfo?.severity || ErrorSeverity.MEDIUM,
         category: errorInfo?.category || ErrorCategory.SYSTEM,
         timestamp: new Date(),

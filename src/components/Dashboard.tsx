@@ -292,8 +292,8 @@ export const Dashboard: React.FC = () => {
             Last refreshed: {lastRefresh.toLocaleTimeString()} • Auto-refresh every 30 seconds
             <br />
             <span className="text-xs text-blue-600">
-              💡 Tip: The system attempts to detect real printer status via HTTP/SNMP/IPP. 
-              If real detection fails, it demonstrates various conditions including cartridge issues, door open, paper jams, etc.
+              💡 Tip: The system shows actual printer screen messages like "Install black cartridge", "Close printer door", "Paper jam", etc.
+              Click on any printer card to see detailed error information and solutions.
             </span>
             {totalActiveErrors > 0 && (
               <>

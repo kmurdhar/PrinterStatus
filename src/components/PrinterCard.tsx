@@ -47,7 +47,7 @@ export const PrinterCard: React.FC<PrinterCardProps> = ({ printer, onClick }) =>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center text-sm text-red-600">
                 <AlertTriangle className="w-4 h-4 mr-1" />
-                Active Errors
+                Printer Messages
               </div>
               <span className="text-sm font-medium text-red-700">{activeErrors.length}</span>
             </div>
@@ -61,7 +61,7 @@ export const PrinterCard: React.FC<PrinterCardProps> = ({ printer, onClick }) =>
                       : 'bg-orange-100 text-orange-800 border border-orange-200'
                   }`}
                 >
-                  {error.code}
+                  {error.description}
                 </span>
               ))}
               {activeErrors.length > 3 && (
