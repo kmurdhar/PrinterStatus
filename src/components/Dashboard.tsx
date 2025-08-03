@@ -292,8 +292,8 @@ export const Dashboard: React.FC = () => {
             Last refreshed: {lastRefresh.toLocaleTimeString()} • Auto-refresh every 30 seconds
             <br />
             <span className="text-xs text-blue-600">
-              💡 Tip: The system simulates various printer conditions for demonstration. 
-              In production, it would detect real printer status from HTTP/SNMP responses.
+              💡 Tip: The system attempts to detect real printer status via HTTP/SNMP/IPP. 
+              If real detection fails, it demonstrates various conditions including cartridge issues, door open, paper jams, etc.
             </span>
             {totalActiveErrors > 0 && (
               <>

@@ -481,93 +481,44 @@ class PrinterService {
       
       // Look for common status indicators in HTML
       const statusKeywords = {
-        ready: ['ready', 'idle', 'online'],
+        cartridge_issue: ['install cartridge', 'install black cartridge', 'install ink cartridge', 'install toner cartridge', 'cartridge missing', 'cartridge not detected', 'replace cartridge', 'cartridge error'],
+        error: ['door open', 'cover open', 'door is open', 'cover is open', 'close door', 'close cover', 'access door', 'front door', 'rear door', 'top cover', 'scanner cover', 'maintenance door'],
         printing: ['printing', 'busy', 'processing'],
         loading_paper: ['loading paper', 'paper loading', 'load paper', 'insert paper', 'paper tray', 'refilling'],
         paper_jam: ['paper jam', 'jam', 'paper stuck', 'paper feed', 'feed error', 'paper path'],
         paper_out: ['paper out', 'no paper', 'paper empty', 'out of paper', 'paper low'],
-        cartridge_issue: ['cartridge', 'ink cartridge', 'toner cartridge', 'replace cartridge', 'cartridge error', 'cartridge missing', 'install cartridge'],
         low_ink: ['low ink', 'low toner', 'ink low', 'toner low', 'replace ink', 'replace toner'],
-        error: ['error', 'jam', 'problem', 'fault', 'door open', 'cover open', 'door', 'cover', 'close door', 'close cover', 'access door', 'front door', 'rear door', 'top cover', 'scanner cover'],
+        ready: ['ready', 'idle', 'online'],
         offline: ['offline', 'disconnected', 'not available']
       };
       
       const bodyText = doc.body?.textContent?.toLowerCase() || '';
       
-      // Enhanced detection for door/cover open conditions
-      const doorOpenKeywords = [
-        'door open', 'cover open', 'door is open', 'cover is open',
-        'close door', 'close cover', 'close the door', 'close the cover',
-        'access door open', 'front door open', 'rear door open',
-        'top cover open', 'scanner cover open', 'maintenance door',
-        'door ajar', 'cover ajar'
-      ];
-      
-      // Check for door/cover open first (high priority)
-      for (const keyword of doorOpenKeywords) {
-        if (bodyText.includes(keyword)) {
-          return {
-            status: PrinterStatus.ERROR,
-            inkLevels: this.getDefaultInkLevels('error'),
-            paperLevel: this.getDefaultPaperLevel('error'),
-            message: `Door/Cover open detected: ${keyword}`,
-            errorCode: '30.01'
-          };
-        }
-      }
-      
-      // Check for specific status keywords with priority
+      // Check for specific status keywords with priority (cartridge issues first)
       for (const [status, keywords] of Object.entries(statusKeywords)) {
         if (keywords.some(keyword => bodyText.includes(keyword))) {
+          const matchedKeyword = keywords.find(k => bodyText.includes(k));
+          let errorCode = this.extractErrorCodeFromHtml(bodyText);
+          
+          // Set specific error codes based on detected condition
+          if (status === 'cartridge_issue') {
+            errorCode = errorCode || '10.00'; // Default cartridge error code
+          } else if (status === 'error' && matchedKeyword?.includes('door')) {
+            errorCode = errorCode || '30.01'; // Door open error code
+          }
+          
           return {
             status: this.mapStatusToEnum(status),
             inkLevels: this.getDefaultInkLevels(status),
             paperLevel: this.getDefaultPaperLevel(status),
-            message: `Status detected: ${keywords.find(k => bodyText.includes(k))}`,
-            errorCode: this.extractErrorCodeFromHtml(bodyText)
+            message: `${matchedKeyword}`,
+            errorCode: errorCode
           };
         }
       }
       
-      // If we can't detect specific status but got a response, simulate some common issues
-      // This helps demonstrate the error detection system
-      if (bodyText.length > 0) {
-        // Simulate random issues for demonstration (remove in production)
-        const simulatedIssues = [
-          {
-            status: PrinterStatus.ERROR,
-            message: 'Door open - Close all printer doors and covers',
-            errorCode: '30.01'
-          },
-          {
-            status: PrinterStatus.PAPER_JAM,
-            message: 'Paper jam detected in input tray',
-            errorCode: '13.01'
-          },
-          {
-            status: PrinterStatus.LOW_INK,
-            message: 'Black ink cartridge low',
-            errorCode: '10.00'
-          },
-          {
-            status: PrinterStatus.READY,
-            message: 'Printer ready',
-            errorCode: undefined
-          }
-        ];
-        
-        // Use a deterministic selection based on printer IP for consistency
-        const hash = bodyText.length % simulatedIssues.length;
-        const selectedIssue = simulatedIssues[hash];
-        
-        return {
-          status: selectedIssue.status,
-          inkLevels: this.getDefaultInkLevels(selectedIssue.status.toString()),
-          paperLevel: this.getDefaultPaperLevel(selectedIssue.status.toString()),
-          message: selectedIssue.message,
-          errorCode: selectedIssue.errorCode
-        };
-      }
+      // If we got a response but couldn't parse it, use enhanced simulation
+      return this.getEnhancedSimulation({ ipAddress: '', model: '', name: '', id: '', location: '' } as any);
     } catch (error) {
       console.error('HTML parsing error:', error);
     }
@@ -644,10 +595,10 @@ class PrinterService {
   // Get default ink levels based on status
   private getDefaultInkLevels(status: string): any {
     switch (status) {
-      case 'low_ink':
-        return { black: 15, cyan: 20, magenta: 18, yellow: 12 };
       case 'cartridge_issue':
         return { black: 0, cyan: 45, magenta: 50, yellow: 40 };
+      case 'low_ink':
+        return { black: 15, cyan: 20, magenta: 18, yellow: 12 };
       default:
         return { black: 75, cyan: 80, magenta: 70, yellow: 85 };
     }
@@ -662,6 +613,8 @@ class PrinterService {
         return 25;
       case 'paper_jam':
         return 60;
+      case 'cartridge_issue':
+        return 75;
       default:
         return 80;
     }
