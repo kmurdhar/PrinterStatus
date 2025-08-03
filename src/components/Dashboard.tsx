@@ -290,6 +290,11 @@ export const Dashboard: React.FC = () => {
         {printers.length > 0 && (
           <div className="mt-8 text-center text-sm text-gray-500">
             Last refreshed: {lastRefresh.toLocaleTimeString()} • Auto-refresh every 30 seconds
+            <br />
+            <span className="text-xs text-blue-600">
+              💡 Tip: The system simulates various printer conditions for demonstration. 
+              In production, it would detect real printer status from HTTP/SNMP responses.
+            </span>
             {totalActiveErrors > 0 && (
               <>
                 <span className="mx-2">•</span>
