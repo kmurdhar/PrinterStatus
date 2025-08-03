@@ -55,12 +55,18 @@ class PrinterService {
       const printersData = localStorage.getItem('printers');
       if (printersData) {
         const printersArray: Printer[] = JSON.parse(printersData);
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        
         printersArray.forEach(printer => {
           printer.lastUpdated = new Date(printer.lastUpdated);
-          printer.statusHistory = printer.statusHistory.map(entry => ({
+          // Filter out history older than 5 minutes and convert timestamps
+          printer.statusHistory = printer.statusHistory
+            .map(entry => ({
             ...entry,
             timestamp: new Date(entry.timestamp)
-          }));
+          }))
+            .filter(entry => entry.timestamp > fiveMinutesAgo);
+          
           // Ensure errorCodes array exists and convert timestamps
           printer.errorCodes = (printer.errorCodes || []).map(error => ({
             ...error,
@@ -72,12 +78,15 @@ class PrinterService {
 
       const historyData = localStorage.getItem('printerHistory');
       if (historyData) {
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
         const historyObj = JSON.parse(historyData);
         Object.entries(historyObj).forEach(([id, history]) => {
-          const convertedHistory = (history as any[]).map(entry => ({
+          const convertedHistory = (history as any[])
+            .map(entry => ({
             ...entry,
             timestamp: new Date(entry.timestamp)
-          }));
+          }))
+            .filter(entry => entry.timestamp > fiveMinutesAgo);
           this.statusHistory.set(id, convertedHistory);
         });
       }
@@ -836,6 +845,11 @@ class PrinterService {
 
   private addStatusHistoryEntry(printerId: string, status: PrinterStatus, message?: string, errorCode?: string): void {
     const history = this.statusHistory.get(printerId) || [];
+    
+    // Remove entries older than 5 minutes
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const recentHistory = history.filter(entry => entry.timestamp > fiveMinutesAgo);
+    
     const entry: StatusHistoryEntry = {
       timestamp: new Date(),
       status,
@@ -843,17 +857,18 @@ class PrinterService {
       errorCode
     };
     
-    history.push(entry);
+    recentHistory.push(entry);
     
-    if (history.length > 50) {
-      history.splice(0, history.length - 50);
+    // Keep maximum 10 recent entries (within 5 minutes)
+    if (recentHistory.length > 10) {
+      recentHistory.splice(0, recentHistory.length - 10);
     }
     
-    this.statusHistory.set(printerId, history);
+    this.statusHistory.set(printerId, recentHistory);
     
     const printer = this.printers.get(printerId);
     if (printer) {
-      printer.statusHistory = [...history];
+      printer.statusHistory = [...recentHistory];
       this.printers.set(printerId, printer);
     }
     

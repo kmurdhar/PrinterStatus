@@ -289,7 +289,7 @@ export const Dashboard: React.FC = () => {
         {/* Last Refresh Info */}
         {printers.length > 0 && (
           <div className="mt-8 text-center text-sm text-gray-500">
-            Last refreshed: {lastRefresh.toLocaleTimeString()} • Auto-refresh every 30 seconds
+            Last refreshed: {lastRefresh.toLocaleTimeString()} • Auto-refresh every 30 seconds • History cleared after 5 minutes
             <br />
             <span className="text-xs text-blue-600">
               💡 Tip: The system shows actual printer screen messages like "Install black cartridge", "Close printer door", "Paper jam", etc.

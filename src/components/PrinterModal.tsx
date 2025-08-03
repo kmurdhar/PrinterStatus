@@ -118,10 +118,15 @@ export const PrinterModal: React.FC<PrinterModalProps> = ({ printer, isOpen, onC
           <div className="space-y-4">
             <label className="text-sm font-medium text-gray-600 flex items-center">
               <History className="w-4 h-4 mr-2" />
-              Recent Status History
+              Recent Status History (Last 5 minutes)
             </label>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {printer.statusHistory.slice(-5).reverse().map((entry, index) => {
+            {printer.statusHistory.length === 0 ? (
+              <div className="text-center py-4 text-gray-500 bg-gray-50 rounded-lg">
+                No recent status changes in the last 5 minutes
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {printer.statusHistory.slice(-10).reverse().map((entry, index) => {
                 const entryConfig = getStatusConfig(entry.status);
                 return (
                   <div key={index} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
@@ -146,8 +151,9 @@ export const PrinterModal: React.FC<PrinterModalProps> = ({ printer, isOpen, onC
                     </div>
                   </div>
                 );
-              })}
-            </div>
+                })}
+              </div>
+            )}
           </div>
 
           {/* Error Codes */}
