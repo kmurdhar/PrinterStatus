@@ -292,7 +292,7 @@ export const Dashboard: React.FC = () => {
             Last refreshed: {lastRefresh.toLocaleTimeString()} • Auto-refresh every 30 seconds • History cleared after 5 minutes
             <br />
             <span className="text-xs text-blue-600">
-              💡 Tip: The system shows actual printer screen messages like "Install black cartridge", "Close printer door", "Paper jam", etc.
+              💡 Tip: The system attempts to read actual printer status. If your printer is working fine, it should show "Ready" status.
               Click on any printer card to see detailed error information and solutions.
             </span>
             {totalActiveErrors > 0 && (

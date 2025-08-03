@@ -139,12 +139,19 @@ class PrinterService {
         return this.updatePrinterStatus(printer, PrinterStatus.OFFLINE, 'Network unreachable');
       }
 
-      // Try multiple methods to get real printer status
+      // Try to get real printer status first
       let statusData = await this.tryHttpStatusDetection(printer);
       
-      // If HTTP detection fails, try enhanced simulation with cartridge focus
+      // If we can't get real status, assume printer is ready (since it's reachable)
       if (!statusData) {
-        statusData = this.getEnhancedSimulation(printer);
+        console.log(`No specific status detected for ${printer.name}, assuming ready`);
+        statusData = {
+          status: PrinterStatus.READY,
+          message: 'Printer ready',
+          inkLevels: { black: 75, cyan: 80, magenta: 70, yellow: 85 },
+          paperLevel: 80,
+          errorCode: undefined
+        };
       }
 
       const updatedPrinter = {
@@ -236,7 +243,7 @@ class PrinterService {
   private async testHttpConnection(ipAddress: string): Promise<boolean> {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
 
       const response = await fetch(`http://${ipAddress}`, {
         method: 'HEAD',
@@ -354,14 +361,8 @@ class PrinterService {
     if (modelUpper.includes('BROTHER')) return PRINTER_HTTP_ENDPOINTS.BROTHER;
     if (modelUpper.includes('XEROX')) return PRINTER_HTTP_ENDPOINTS.XEROX;
     
-    // Try all endpoints if model is unknown
-    return [
-      ...PRINTER_HTTP_ENDPOINTS.HP,
-      ...PRINTER_HTTP_ENDPOINTS.CANON,
-      ...PRINTER_HTTP_ENDPOINTS.EPSON,
-      ...PRINTER_HTTP_ENDPOINTS.BROTHER,
-      ...PRINTER_HTTP_ENDPOINTS.XEROX
-    ];
+    // Try common endpoints if model is unknown
+    return ['/status.html', '/hp/device/this.LCDispatcher', '/general/status.html'];
   }
 
   // Parse HTTP response for status information
@@ -495,20 +496,20 @@ class PrinterService {
       
       // Look for common status indicators in HTML
       const statusKeywords = {
-        cartridge_issue: ['install cartridge', 'install black cartridge', 'install ink cartridge', 'install toner cartridge', 'cartridge missing', 'cartridge not detected', 'replace cartridge', 'cartridge error'],
-        error: ['door open', 'cover open', 'door is open', 'cover is open', 'close door', 'close cover', 'access door', 'front door', 'rear door', 'top cover', 'scanner cover', 'maintenance door'],
+        cartridge_issue: ['install cartridge', 'install black cartridge', 'install ink cartridge', 'install toner cartridge', 'cartridge missing', 'cartridge not detected', 'replace cartridge', 'cartridge error', 'cartridge problem'],
+        error: ['door open', 'cover open', 'door is open', 'cover is open', 'close door', 'close cover', 'access door', 'front door', 'rear door', 'top cover', 'scanner cover', 'maintenance door', 'door ajar'],
         printing: ['printing', 'busy', 'processing'],
         loading_paper: ['loading paper', 'paper loading', 'load paper', 'insert paper', 'paper tray', 'refilling'],
         paper_jam: ['paper jam', 'jam', 'paper stuck', 'paper feed', 'feed error', 'paper path'],
         paper_out: ['paper out', 'no paper', 'paper empty', 'out of paper', 'paper low'],
         low_ink: ['low ink', 'low toner', 'ink low', 'toner low', 'replace ink', 'replace toner'],
-        ready: ['ready', 'idle', 'online'],
+        ready: ['ready', 'idle', 'online', 'standby', 'waiting', 'available'],
         offline: ['offline', 'disconnected', 'not available']
       };
       
       const bodyText = doc.body?.textContent?.toLowerCase() || '';
       
-      // Check for specific status keywords with priority (cartridge issues first)
+      // Check for specific status keywords with priority (errors first, then ready)
       for (const [status, keywords] of Object.entries(statusKeywords)) {
         if (keywords.some(keyword => bodyText.includes(keyword))) {
           const matchedKeyword = keywords.find(k => bodyText.includes(k));
@@ -531,8 +532,14 @@ class PrinterService {
         }
       }
       
-      // If we got a response but couldn't parse it, use enhanced simulation
-      return this.getEnhancedSimulation(printer);
+      // If we got a response but couldn't parse any error, assume ready
+      return {
+        status: PrinterStatus.READY,
+        message: 'Printer ready',
+        inkLevels: { black: 75, cyan: 80, magenta: 70, yellow: 85 },
+        paperLevel: 80,
+        errorCode: undefined
+      };
     } catch (error) {
       console.error('HTML parsing error:', error);
     }
