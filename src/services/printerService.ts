@@ -485,7 +485,6 @@ class PrinterService {
             paperLevel: this.getDefaultPaperLevel(status),
             message: `Status detected: ${keywords.find(k => bodyText.includes(k))}`,
             errorCode: this.extractErrorCodeFromHtml(bodyText)
-            errorCode: this.extractErrorCode(data, alerts)
           };
         }
       }
