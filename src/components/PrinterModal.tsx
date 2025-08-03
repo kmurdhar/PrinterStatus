@@ -1,7 +1,9 @@
 import React from 'react';
 import { Printer, PrinterStatus } from '../types/printer';
 import { getStatusConfig, formatLastUpdated, getInkLevelColor, getPaperLevelColor } from '../utils/printerUtils';
-import { X, Printer as PrinterIcon, MapPin, Monitor, Clock, Droplets, FileText, History } from 'lucide-react';
+import { X, Printer as PrinterIcon, MapPin, Monitor, Clock, Droplets, FileText, History, AlertTriangle } from 'lucide-react';
+import { ErrorCodePanel } from './ErrorCodePanel';
+import { printerService } from '../services/printerService';
 
 interface PrinterModalProps {
   printer: Printer | null;
@@ -13,6 +15,11 @@ export const PrinterModal: React.FC<PrinterModalProps> = ({ printer, isOpen, onC
   if (!isOpen || !printer) return null;
 
   const statusConfig = getStatusConfig(printer.status);
+  
+  const handleResolveError = (errorCode: string) => {
+    printerService.resolveErrorCode(printer.id, errorCode);
+    // The parent component will handle the refresh
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -124,6 +131,11 @@ export const PrinterModal: React.FC<PrinterModalProps> = ({ printer, isOpen, onC
                         <span className={`text-sm font-medium ${entryConfig.color}`}>
                           {entryConfig.label}
                         </span>
+                        {entry.errorCode && (
+                          <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
+                            {entry.errorCode}
+                          </span>
+                        )}
                         <span className="text-xs text-gray-500">
                           {entry.timestamp.toLocaleString()}
                         </span>
@@ -137,6 +149,12 @@ export const PrinterModal: React.FC<PrinterModalProps> = ({ printer, isOpen, onC
               })}
             </div>
           </div>
+
+          {/* Error Codes */}
+          <ErrorCodePanel 
+            errorCodes={printer.errorCodes || []}
+            onResolveError={handleResolveError}
+          />
 
           {/* Last Updated */}
           <div className="flex items-center text-sm text-gray-500 pt-4 border-t border-gray-200">

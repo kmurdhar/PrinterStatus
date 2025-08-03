@@ -1,4 +1,6 @@
 import { Printer, PrinterStatus, StatusHistoryEntry } from '../types/printer';
+import { ErrorCode, ErrorSeverity, ErrorCategory } from '../types/printer';
+import { getErrorCodeInfo, parseErrorFromText } from '../utils/errorCodes';
 
 export interface PrinterConfig {
   id: string;
@@ -59,6 +61,11 @@ class PrinterService {
             ...entry,
             timestamp: new Date(entry.timestamp)
           }));
+          // Ensure errorCodes array exists and convert timestamps
+          printer.errorCodes = (printer.errorCodes || []).map(error => ({
+            ...error,
+            timestamp: new Date(error.timestamp)
+          }));
           this.printers.set(printer.id, printer);
         });
       }
@@ -86,7 +93,9 @@ class PrinterService {
       inkLevels: { black: 0, cyan: 0, magenta: 0, yellow: 0 },
       paperLevel: 0,
       lastUpdated: new Date(),
-      statusHistory: []
+      statusHistory: [],
+      errorCodes: [],
+      lastErrorCode: undefined
     };
     
     this.printers.set(config.id, printer);
@@ -147,7 +156,12 @@ class PrinterService {
       };
 
       if (printer.status !== statusData.status) {
-        this.addStatusHistoryEntry(printer.id, statusData.status, statusData.message);
+        this.addStatusHistoryEntry(printer.id, statusData.status, statusData.message, statusData.errorCode);
+      }
+      
+      // Process any error codes found in the status message
+      if (statusData.message) {
+        this.processErrorCodes(printer.id, statusData.message, printer.model);
       }
 
       this.printers.set(printer.id, updatedPrinter);
@@ -156,7 +170,9 @@ class PrinterService {
 
     } catch (error) {
       console.error(`Failed to check printer ${printer.name}:`, error);
-      return this.updatePrinterStatus(printer, PrinterStatus.ERROR, `Connection error: ${error}`);
+      const errorMessage = `Connection error: ${error}`;
+      this.processErrorCodes(printer.id, errorMessage, printer.model);
+      return this.updatePrinterStatus(printer, PrinterStatus.ERROR, errorMessage);
     }
   }
 
@@ -428,7 +444,8 @@ class PrinterService {
           status: detectedStatus,
           inkLevels: this.extractInkLevelsFromXml(xmlDoc),
           paperLevel: this.extractPaperLevelFromXml(xmlDoc),
-          message: alertMessages[0] || 'Status from XML API'
+          message: alertMessages[0] || 'Status from XML API',
+          errorCode: this.extractErrorCodeFromXml(xmlDoc)
         };
       }
     } catch (error) {
@@ -466,7 +483,9 @@ class PrinterService {
             status: this.mapStatusToEnum(status),
             inkLevels: this.getDefaultInkLevels(status),
             paperLevel: this.getDefaultPaperLevel(status),
-            message: `Status detected: ${keywords.find(k => bodyText.includes(k))}`
+            message: `Status detected: ${keywords.find(k => bodyText.includes(k))}`,
+            errorCode: this.extractErrorCodeFromHtml(bodyText)
+            errorCode: this.extractErrorCode(data, alerts)
           };
         }
       }
@@ -587,6 +606,97 @@ class PrinterService {
     return 75;
   }
 
+  // Extract error codes from various response formats
+  private extractErrorCode(data: any, alerts?: any[]): string | undefined {
+    // Check direct error code fields
+    if (data.errorCode) return data.errorCode;
+    if (data.error_code) return data.error_code;
+    if (data.code) return data.code;
+    
+    // Check in alerts/messages
+    if (alerts && alerts.length > 0) {
+      for (const alert of alerts) {
+        const message = alert.message || alert.text || alert.description || '';
+        const codes = parseErrorFromText(message);
+        if (codes.length > 0) return codes[0];
+      }
+    }
+    
+    return undefined;
+  }
+
+  private extractErrorCodeFromXml(xmlDoc: Document): string | undefined {
+    const errorElements = xmlDoc.querySelectorAll('ErrorCode, Error, Code, AlertCode');
+    if (errorElements.length > 0) {
+      return errorElements[0].textContent || undefined;
+    }
+    
+    // Parse from text content
+    const bodyText = xmlDoc.body?.textContent || xmlDoc.documentElement?.textContent || '';
+    const codes = parseErrorFromText(bodyText);
+    return codes.length > 0 ? codes[0] : undefined;
+  }
+
+  private extractErrorCodeFromHtml(text: string): string | undefined {
+    const codes = parseErrorFromText(text);
+    return codes.length > 0 ? codes[0] : undefined;
+  }
+
+  // Process and store error codes
+  private processErrorCodes(printerId: string, message: string, printerModel: string): void {
+    const errorCodes = parseErrorFromText(message, printerModel);
+    const printer = this.printers.get(printerId);
+    
+    if (!printer || errorCodes.length === 0) return;
+    
+    errorCodes.forEach(code => {
+      // Check if this error code already exists and is active
+      const existingError = printer.errorCodes.find(e => e.code === code && !e.resolved);
+      if (existingError) return; // Don't duplicate active errors
+      
+      const errorInfo = getErrorCodeInfo(code, printerModel);
+      const newError: ErrorCode = {
+        code,
+        description: errorInfo?.description || `Unknown error code: ${code}`,
+        severity: errorInfo?.severity || ErrorSeverity.MEDIUM,
+        category: errorInfo?.category || ErrorCategory.SYSTEM,
+        timestamp: new Date(),
+        resolved: false,
+        solution: errorInfo?.solution
+      };
+      
+      printer.errorCodes.push(newError);
+      printer.lastErrorCode = code;
+    });
+    
+    this.printers.set(printerId, printer);
+    this.saveToStorage();
+  }
+
+  // Resolve an error code
+  resolveErrorCode(printerId: string, errorCode: string): void {
+    const printer = this.printers.get(printerId);
+    if (!printer) return;
+    
+    const error = printer.errorCodes.find(e => e.code === errorCode && !e.resolved);
+    if (error) {
+      error.resolved = true;
+      this.printers.set(printerId, printer);
+      this.saveToStorage();
+    }
+  }
+
+  // Get active error codes for a printer
+  getActiveErrorCodes(printerId: string): ErrorCode[] {
+    const printer = this.printers.get(printerId);
+    return printer ? printer.errorCodes.filter(e => !e.resolved) : [];
+  }
+
+  // Get all error codes for a printer
+  getAllErrorCodes(printerId: string): ErrorCode[] {
+    const printer = this.printers.get(printerId);
+    return printer ? printer.errorCodes : [];
+  }
   private updatePrinterStatus(printer: Printer, status: PrinterStatus, message?: string): Printer {
     const updatedPrinter = {
       ...printer,
@@ -603,12 +713,13 @@ class PrinterService {
     return updatedPrinter;
   }
 
-  private addStatusHistoryEntry(printerId: string, status: PrinterStatus, message?: string): void {
+  private addStatusHistoryEntry(printerId: string, status: PrinterStatus, message?: string, errorCode?: string): void {
     const history = this.statusHistory.get(printerId) || [];
     const entry: StatusHistoryEntry = {
       timestamp: new Date(),
       status,
-      message
+      message,
+      errorCode
     };
     
     history.push(entry);

@@ -9,6 +9,8 @@ export interface Printer {
   paperLevel: number;
   lastUpdated: Date;
   statusHistory: StatusHistoryEntry[];
+  errorCodes: ErrorCode[];
+  lastErrorCode?: string;
 }
 
 export interface InkLevels {
@@ -22,6 +24,17 @@ export interface StatusHistoryEntry {
   timestamp: Date;
   status: PrinterStatus;
   message?: string;
+  errorCode?: string;
+}
+
+export interface ErrorCode {
+  code: string;
+  description: string;
+  severity: ErrorSeverity;
+  category: ErrorCategory;
+  timestamp: Date;
+  resolved: boolean;
+  solution?: string;
 }
 
 export enum PrinterStatus {
@@ -35,6 +48,22 @@ export enum PrinterStatus {
   OFFLINE = 'offline',
   ERROR = 'error',
   MAINTENANCE_REQUIRED = 'maintenance_required'
+}
+
+export enum ErrorSeverity {
+  LOW = 'low',
+  MEDIUM = 'medium',
+  HIGH = 'high',
+  CRITICAL = 'critical'
+}
+
+export enum ErrorCategory {
+  PAPER = 'paper',
+  INK_TONER = 'ink_toner',
+  MECHANICAL = 'mechanical',
+  NETWORK = 'network',
+  SYSTEM = 'system',
+  USER_INTERVENTION = 'user_intervention'
 }
 
 export interface StatusConfig {
