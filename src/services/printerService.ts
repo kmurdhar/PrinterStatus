@@ -527,7 +527,7 @@ class PrinterService {
             inkLevels: this.getDefaultInkLevels(status),
             paperLevel: this.getDefaultPaperLevel(status),
             message: `${matchedKeyword}`,
-            errorCode: errorCode
+            errorCode: this.extractErrorCodeFromHtml(bodyText)
           };
         }
       }
