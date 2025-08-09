@@ -101,19 +101,27 @@ class PrinterService {
         return this.updatePrinterStatus(printer, PrinterStatus.OFFLINE, 'Network unreachable');
       }
 
-      // Try to get real printer status first
+      // Try to get real printer status
       let statusData = await this.tryHttpStatusDetection(printer);
       
-      // If we can't get real status, assume printer is ready (since it's reachable)
+      // If we can't get real status and printer is reachable, it might still have issues
       if (!statusData) {
-        console.log(`No specific status detected for ${printer.name}, assuming ready`);
-        statusData = {
-          status: PrinterStatus.READY,
-          message: 'Printer ready',
-          inkLevels: { black: 75, cyan: 80, magenta: 70, yellow: 85 },
-          paperLevel: 80,
-          errorCode: undefined
-        };
+        console.log(`Could not detect specific status for ${printer.name}, checking basic connectivity`);
+        
+        // Try a more thorough connectivity test
+        const hasWebInterface = await this.testPrinterWebInterface(printer.ipAddress);
+        
+        if (hasWebInterface) {
+          // Printer responds but we can't parse status - assume ready but with limited info
+          statusData = {
+            status: PrinterStatus.READY,
+            message: 'Printer online - status detection limited',
+            errorCode: undefined
+          };
+        } else {
+          // Printer doesn't respond to web interface - likely offline or has issues
+          return this.updatePrinterStatus(printer, PrinterStatus.OFFLINE, 'Web interface not accessible');
+        }
       }
 
       const updatedPrinter = {
@@ -133,6 +141,42 @@ class PrinterService {
       const errorMessage = `Connection error: ${error}`;
       return this.updatePrinterStatus(printer, PrinterStatus.ERROR, errorMessage);
     }
+  }
+
+  // Test if printer web interface is actually accessible
+  private async testPrinterWebInterface(ipAddress: string): Promise<boolean> {
+    const testUrls = [
+      `http://${ipAddress}`,
+      `http://${ipAddress}/status.html`,
+      `http://${ipAddress}/hp/device/this.LCDispatcher`,
+      `http://${ipAddress}/general/status.html`
+    ];
+
+    for (const url of testUrls) {
+      try {
+        console.log(`Testing web interface: ${url}`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+        const response = await fetch(url, {
+          method: 'GET',
+          mode: 'no-cors', // This will always succeed if the server responds
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+        
+        // If we get here without error, the server responded
+        console.log(`Web interface accessible at: ${url}`);
+        return true;
+        
+      } catch (error) {
+        console.log(`Web interface test failed for ${url}:`, error.message);
+        continue;
+      }
+    }
+    
+    return false;
   }
 
   // Network connectivity test using multiple methods
@@ -163,7 +207,7 @@ class PrinterService {
   private async testHttpConnection(ipAddress: string): Promise<boolean> {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
 
       const response = await fetch(`http://${ipAddress}`, {
         method: 'HEAD',
@@ -174,6 +218,7 @@ class PrinterService {
       clearTimeout(timeoutId);
       return true; // If we get any response, the printer is reachable
     } catch (error) {
+      console.log(`HTTP connection test failed for ${ipAddress}:`, error.message);
       return false;
     }
   }
@@ -182,15 +227,20 @@ class PrinterService {
   private async testImageLoad(ipAddress: string): Promise<boolean> {
     return new Promise((resolve) => {
       const img = new Image();
-      const timeout = setTimeout(() => resolve(false), 3000);
+      const timeout = setTimeout(() => {
+        console.log(`Image load test timed out for ${ipAddress}`);
+        resolve(false);
+      }, 5000);
 
       img.onload = () => {
         clearTimeout(timeout);
+        console.log(`Image load test succeeded for ${ipAddress}`);
         resolve(true);
       };
 
       img.onerror = () => {
         clearTimeout(timeout);
+        console.log(`Image load test got error for ${ipAddress} - but this means server responded`);
         resolve(true); // Error still means the IP is reachable
       };
 
@@ -205,20 +255,24 @@ class PrinterService {
         const ws = new WebSocket(`ws://${ipAddress}:9100`); // Common printer port
         const timeout = setTimeout(() => {
           ws.close();
+          console.log(`WebSocket test timed out for ${ipAddress}`);
           resolve(false);
-        }, 2000);
+        }, 3000);
 
         ws.onopen = () => {
           clearTimeout(timeout);
           ws.close();
+          console.log(`WebSocket test succeeded for ${ipAddress}`);
           resolve(true);
         };
 
         ws.onerror = () => {
           clearTimeout(timeout);
+          console.log(`WebSocket test failed for ${ipAddress}`);
           resolve(false);
         };
       } catch (error) {
+        console.log(`WebSocket test exception for ${ipAddress}:`, error.message);
         resolve(false);
       }
     });
