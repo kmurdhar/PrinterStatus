@@ -1,9 +1,7 @@
 import React from 'react';
 import { Printer, PrinterStatus } from '../types/printer';
 import { getStatusConfig, formatLastUpdated } from '../utils/printerUtils';
-import { X, Printer as PrinterIcon, MapPin, Monitor, Clock, AlertTriangle } from 'lucide-react';
-import { ErrorCodePanel } from './ErrorCodePanel';
-import { printerService } from '../services/printerService';
+import { X, Printer as PrinterIcon, MapPin, Monitor, Clock } from 'lucide-react';
 
 interface PrinterModalProps {
   printer: Printer | null;
@@ -15,11 +13,6 @@ export const PrinterModal: React.FC<PrinterModalProps> = ({ printer, isOpen, onC
   if (!isOpen || !printer) return null;
 
   const statusConfig = getStatusConfig(printer.status);
-  
-  const handleResolveError = (errorCode: string) => {
-    printerService.resolveErrorCode(printer.id, errorCode);
-    // The parent component will handle the refresh
-  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -63,6 +56,19 @@ export const PrinterModal: React.FC<PrinterModalProps> = ({ printer, isOpen, onC
             </div>
           </div>
 
+          {/* Current Message */}
+          {printer.currentMessage && printer.status !== PrinterStatus.READY && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-600">Current Message</label>
+              <div className="px-4 py-3 bg-orange-50 border border-orange-200 rounded-lg">
+                <p className="text-orange-800 font-medium">{printer.currentMessage}</p>
+                {printer.currentErrorCode && (
+                  <p className="text-sm text-orange-600 mt-1">Error Code: {printer.currentErrorCode}</p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Network Info */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-600">Network Information</label>
@@ -71,12 +77,6 @@ export const PrinterModal: React.FC<PrinterModalProps> = ({ printer, isOpen, onC
               <span>IP Address: {printer.ipAddress}</span>
             </div>
           </div>
-
-          {/* Error Codes */}
-          <ErrorCodePanel 
-            errorCodes={printer.errorCodes || []}
-            onResolveError={handleResolveError}
-          />
 
           {/* Last Updated */}
           <div className="flex items-center text-sm text-gray-500 pt-4 border-t border-gray-200">

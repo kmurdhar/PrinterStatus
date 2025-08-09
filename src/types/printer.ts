@@ -5,12 +5,9 @@ export interface Printer {
   model: string;
   ipAddress: string;
   status: PrinterStatus;
-  inkLevels: InkLevels;
-  paperLevel: number;
   lastUpdated: Date;
-  statusHistory: StatusHistoryEntry[];
-  errorCodes: ErrorCode[];
-  lastErrorCode?: string;
+  currentMessage?: string;
+  currentErrorCode?: string;
 }
 
 export interface InkLevels {

@@ -31,7 +31,6 @@ const PRINTER_HTTP_ENDPOINTS = {
 
 class PrinterService {
   private printers: Map<string, Printer> = new Map();
-  private statusHistory: Map<string, StatusHistoryEntry[]> = new Map();
   private monitoringInterval: NodeJS.Timeout | null = null;
 
   constructor() {
@@ -42,9 +41,6 @@ class PrinterService {
     try {
       const printersArray = Array.from(this.printers.values());
       localStorage.setItem('printers', JSON.stringify(printersArray));
-      
-      const historyObj = Object.fromEntries(this.statusHistory);
-      localStorage.setItem('printerHistory', JSON.stringify(historyObj));
     } catch (error) {
       console.error('Failed to save printers to storage:', error);
     }
@@ -55,39 +51,10 @@ class PrinterService {
       const printersData = localStorage.getItem('printers');
       if (printersData) {
         const printersArray: Printer[] = JSON.parse(printersData);
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
         
         printersArray.forEach(printer => {
           printer.lastUpdated = new Date(printer.lastUpdated);
-          // Filter out history older than 5 minutes and convert timestamps
-          printer.statusHistory = printer.statusHistory
-            .map(entry => ({
-            ...entry,
-            timestamp: new Date(entry.timestamp)
-          }))
-            .filter(entry => entry.timestamp > fiveMinutesAgo);
-          
-          // Ensure errorCodes array exists and convert timestamps
-          printer.errorCodes = (printer.errorCodes || []).map(error => ({
-            ...error,
-            timestamp: new Date(error.timestamp)
-          }));
           this.printers.set(printer.id, printer);
-        });
-      }
-
-      const historyData = localStorage.getItem('printerHistory');
-      if (historyData) {
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-        const historyObj = JSON.parse(historyData);
-        Object.entries(historyObj).forEach(([id, history]) => {
-          const convertedHistory = (history as any[])
-            .map(entry => ({
-            ...entry,
-            timestamp: new Date(entry.timestamp)
-          }))
-            .filter(entry => entry.timestamp > fiveMinutesAgo);
-          this.statusHistory.set(id, convertedHistory);
         });
       }
     } catch (error) {
@@ -99,22 +66,17 @@ class PrinterService {
     const printer: Printer = {
       ...config,
       status: PrinterStatus.OFFLINE,
-      inkLevels: { black: 0, cyan: 0, magenta: 0, yellow: 0 },
-      paperLevel: 0,
       lastUpdated: new Date(),
-      statusHistory: [],
-      errorCodes: [],
-      lastErrorCode: undefined
+      currentMessage: undefined,
+      currentErrorCode: undefined
     };
     
     this.printers.set(config.id, printer);
-    this.statusHistory.set(config.id, []);
     this.saveToStorage();
   }
 
   removePrinter(id: string): void {
     this.printers.delete(id);
-    this.statusHistory.delete(id);
     this.saveToStorage();
   }
 
@@ -157,24 +119,10 @@ class PrinterService {
       const updatedPrinter = {
         ...printer,
         status: statusData.status,
-        inkLevels: statusData.inkLevels,
-        paperLevel: statusData.paperLevel,
-        lastUpdated: new Date()
+        lastUpdated: new Date(),
+        currentMessage: statusData.message,
+        currentErrorCode: statusData.errorCode
       };
-
-      if (printer.status !== statusData.status) {
-        this.addStatusHistoryEntry(printer.id, statusData.status, statusData.message, statusData.errorCode);
-      }
-      
-      // Process any error codes found in the status message
-      if (statusData.message) {
-        this.processErrorCodes(printer.id, statusData.message, printer.model);
-      }
-      
-      // Add specific error code if provided
-      if (statusData.errorCode) {
-        this.addSpecificErrorCode(printer.id, statusData.errorCode, statusData.message, printer.model);
-      }
 
       this.printers.set(printer.id, updatedPrinter);
       this.saveToStorage();
@@ -183,36 +131,8 @@ class PrinterService {
     } catch (error) {
       console.error(`Failed to check printer ${printer.name}:`, error);
       const errorMessage = `Connection error: ${error}`;
-      this.processErrorCodes(printer.id, errorMessage, printer.model);
       return this.updatePrinterStatus(printer, PrinterStatus.ERROR, errorMessage);
     }
-  }
-
-  // Add a specific error code to a printer
-  private addSpecificErrorCode(printerId: string, errorCode: string, message: string, printerModel: string): void {
-    const printer = this.printers.get(printerId);
-    if (!printer) return;
-    
-    // Check if this error code already exists and is active
-    const existingError = printer.errorCodes.find(e => e.code === errorCode && !e.resolved);
-    if (existingError) return; // Don't duplicate active errors
-    
-    const errorInfo = getErrorCodeInfo(errorCode, printerModel);
-    const newError: ErrorCode = {
-      code: errorCode,
-      description: errorInfo?.description || message || `Error code: ${errorCode}`,
-      severity: errorInfo?.severity || ErrorSeverity.MEDIUM,
-      category: errorInfo?.category || ErrorCategory.USER_INTERVENTION,
-      timestamp: new Date(),
-      resolved: false,
-      solution: errorInfo?.solution
-    };
-    
-    printer.errorCodes.push(newError);
-    printer.lastErrorCode = errorCode;
-    
-    this.printers.set(printerId, printer);
-    this.saveToStorage();
   }
 
   // Network connectivity test using multiple methods
@@ -474,10 +394,7 @@ class PrinterService {
         }
         
         return {
-          status: detectedStatus,
-          inkLevels: this.extractInkLevelsFromXml(xmlDoc),
-          paperLevel: this.extractPaperLevelFromXml(xmlDoc),
-          message: alertMessages[0] || 'Status from XML API',
+          errorCode: this.extractErrorCode(data, alerts)
           errorCode: this.extractErrorCodeFromXml(xmlDoc)
         };
       }
@@ -524,8 +441,6 @@ class PrinterService {
           
           return {
             status: this.mapStatusToEnum(status),
-            inkLevels: this.getDefaultInkLevels(status),
-            paperLevel: this.getDefaultPaperLevel(status),
             message: `${matchedKeyword}`,
             errorCode: this.extractErrorCodeFromHtml(bodyText)
           };
@@ -536,8 +451,6 @@ class PrinterService {
       return {
         status: PrinterStatus.READY,
         message: 'Printer ready',
-        inkLevels: { black: 75, cyan: 80, magenta: 70, yellow: 85 },
-        paperLevel: 80,
         errorCode: undefined
       };
     } catch (error) {
@@ -571,92 +484,6 @@ class PrinterService {
     if (status.includes('error') || status.includes('fault')) return PrinterStatus.ERROR;
     
     return PrinterStatus.READY;
-  }
-
-  // Extract ink levels from various data formats
-  private extractInkLevels(supplies: any): any {
-    if (!supplies) return { black: 50, cyan: 50, magenta: 50, yellow: 50 };
-    
-    if (Array.isArray(supplies)) {
-      const levels = { black: 50, cyan: 50, magenta: 50, yellow: 50 };
-      supplies.forEach(supply => {
-        const color = (supply.color || supply.name || '').toLowerCase();
-        const level = supply.level || supply.percentage || 50;
-        
-        if (color.includes('black') || color.includes('bk')) levels.black = level;
-        if (color.includes('cyan') || color.includes('c')) levels.cyan = level;
-        if (color.includes('magenta') || color.includes('m')) levels.magenta = level;
-        if (color.includes('yellow') || color.includes('y')) levels.yellow = level;
-      });
-      return levels;
-    }
-    
-    return supplies.inkLevels || { black: 50, cyan: 50, magenta: 50, yellow: 50 };
-  }
-
-  // Extract ink levels from XML
-  private extractInkLevelsFromXml(xmlDoc: Document): any {
-    const levels = { black: 50, cyan: 50, magenta: 50, yellow: 50 };
-    
-    // Look for supply level elements
-    const supplyElements = xmlDoc.querySelectorAll('Supply, Consumable, Ink');
-    supplyElements.forEach(element => {
-      const color = (element.getAttribute('color') || element.textContent || '').toLowerCase();
-      const level = parseInt(element.getAttribute('level') || '50');
-      
-      if (color.includes('black')) levels.black = level;
-      if (color.includes('cyan')) levels.cyan = level;
-      if (color.includes('magenta')) levels.magenta = level;
-      if (color.includes('yellow')) levels.yellow = level;
-    });
-    
-    return levels;
-  }
-
-  // Get default ink levels based on status
-  private getDefaultInkLevels(status: string): any {
-    switch (status) {
-      case 'cartridge_issue':
-        return { black: 0, cyan: 45, magenta: 50, yellow: 40 };
-      case 'low_ink':
-        return { black: 15, cyan: 20, magenta: 18, yellow: 12 };
-      default:
-        return { black: 75, cyan: 80, magenta: 70, yellow: 85 };
-    }
-  }
-
-  // Get default paper level based on status
-  private getDefaultPaperLevel(status: string): number {
-    switch (status) {
-      case 'paper_out':
-        return 0;
-      case 'loading_paper':
-        return 25;
-      case 'paper_jam':
-        return 60;
-      case 'cartridge_issue':
-        return 75;
-      default:
-        return 80;
-    }
-  }
-
-  // Extract paper level from various sources
-  private extractPaperLevel(data: any): number {
-    if (data.paperLevel) return data.paperLevel;
-    if (data.paper && data.paper.level) return data.paper.level;
-    if (data.tray && data.tray.level) return data.tray.level;
-    return 75; // Default
-  }
-
-  // Extract paper level from XML
-  private extractPaperLevelFromXml(xmlDoc: Document): number {
-    const paperElements = xmlDoc.querySelectorAll('Paper, Tray, MediaLevel');
-    if (paperElements.length > 0) {
-      const level = parseInt(paperElements[0].getAttribute('level') || '75');
-      return level;
-    }
-    return 75;
   }
 
   // Extract error codes from various response formats
@@ -705,61 +532,40 @@ class PrinterService {
       {
         status: PrinterStatus.CARTRIDGE_ISSUE,
         message: 'Install black cartridge',
-        errorCode: '10.00',
-        inkLevels: { black: 0, cyan: 45, magenta: 50, yellow: 40 },
-        paperLevel: 75,
-        weight: 4
+        errorCode: '10.00'
       },
       {
         status: PrinterStatus.CARTRIDGE_ISSUE,
         message: 'Install cyan cartridge',
-        errorCode: '10.01',
-        inkLevels: { black: 60, cyan: 0, magenta: 50, yellow: 40 },
-        paperLevel: 75,
-        weight: 2
+        errorCode: '10.01'
       },
       {
         status: PrinterStatus.CARTRIDGE_ISSUE,
         message: 'Install magenta cartridge',
-        errorCode: '10.02',
-        inkLevels: { black: 60, cyan: 45, magenta: 0, yellow: 40 },
-        paperLevel: 75,
-        weight: 2
+        errorCode: '10.02'
       },
       // Door open (15% probability)
       {
         status: PrinterStatus.ERROR,
         message: 'Close printer door',
-        errorCode: '30.01',
-        inkLevels: { black: 75, cyan: 80, magenta: 70, yellow: 85 },
-        paperLevel: 80,
-        weight: 2
+        errorCode: '30.01'
       },
       // Paper issues (20% probability)
       {
         status: PrinterStatus.PAPER_JAM,
         message: 'Paper jam in input tray',
-        errorCode: '13.01',
-        inkLevels: { black: 75, cyan: 80, magenta: 70, yellow: 85 },
-        paperLevel: 60,
-        weight: 2
+        errorCode: '13.01'
       },
       {
         status: PrinterStatus.PAPER_OUT,
         message: 'Load paper in tray 1',
-        errorCode: '41.01',
-        inkLevels: { black: 75, cyan: 80, magenta: 70, yellow: 85 },
-        paperLevel: 0,
-        weight: 1
+        errorCode: '41.01'
       },
       // Ready state (25% probability)
       {
         status: PrinterStatus.READY,
         message: 'Printer ready',
-        errorCode: undefined,
-        inkLevels: { black: 75, cyan: 80, magenta: 70, yellow: 85 },
-        paperLevel: 80,
-        weight: 3
+        errorCode: undefined
       }
     ];
     
@@ -779,107 +585,17 @@ class PrinterService {
     
     return selectedScenario;
   }
-  // Process and store error codes
-  private processErrorCodes(printerId: string, message: string, printerModel: string): void {
-    const errorCodes = parseErrorFromText(message, printerModel);
-    const printer = this.printers.get(printerId);
-    
-    if (!printer || errorCodes.length === 0) return;
-    
-    errorCodes.forEach(code => {
-      // Check if this error code already exists and is active
-      const existingError = printer.errorCodes.find(e => e.code === code && !e.resolved);
-      if (existingError) return; // Don't duplicate active errors
-      
-      const errorInfo = getErrorCodeInfo(code, printerModel);
-      const newError: ErrorCode = {
-        code,
-        description: message || errorInfo?.description || `Error code: ${errorCode}`,
-        severity: errorInfo?.severity || ErrorSeverity.MEDIUM,
-        category: errorInfo?.category || ErrorCategory.SYSTEM,
-        timestamp: new Date(),
-        resolved: false,
-        solution: errorInfo?.solution
-      };
-      
-      printer.errorCodes.push(newError);
-      printer.lastErrorCode = code;
-    });
-    
-    this.printers.set(printerId, printer);
-    this.saveToStorage();
-  }
-
-  // Resolve an error code
-  resolveErrorCode(printerId: string, errorCode: string): void {
-    const printer = this.printers.get(printerId);
-    if (!printer) return;
-    
-    const error = printer.errorCodes.find(e => e.code === errorCode && !e.resolved);
-    if (error) {
-      error.resolved = true;
-      this.printers.set(printerId, printer);
-      this.saveToStorage();
-    }
-  }
-
-  // Get active error codes for a printer
-  getActiveErrorCodes(printerId: string): ErrorCode[] {
-    const printer = this.printers.get(printerId);
-    return printer ? printer.errorCodes.filter(e => !e.resolved) : [];
-  }
-
-  // Get all error codes for a printer
-  getAllErrorCodes(printerId: string): ErrorCode[] {
-    const printer = this.printers.get(printerId);
-    return printer ? printer.errorCodes : [];
-  }
   private updatePrinterStatus(printer: Printer, status: PrinterStatus, message?: string): Printer {
     const updatedPrinter = {
       ...printer,
       status,
+      currentMessage: message,
       lastUpdated: new Date()
     };
-    
-    if (printer.status !== status) {
-      this.addStatusHistoryEntry(printer.id, status, message);
-    }
     
     this.printers.set(printer.id, updatedPrinter);
     this.saveToStorage();
     return updatedPrinter;
-  }
-
-  private addStatusHistoryEntry(printerId: string, status: PrinterStatus, message?: string, errorCode?: string): void {
-    const history = this.statusHistory.get(printerId) || [];
-    
-    // Remove entries older than 5 minutes
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-    const recentHistory = history.filter(entry => entry.timestamp > fiveMinutesAgo);
-    
-    const entry: StatusHistoryEntry = {
-      timestamp: new Date(),
-      status,
-      message,
-      errorCode
-    };
-    
-    recentHistory.push(entry);
-    
-    // Keep maximum 10 recent entries (within 5 minutes)
-    if (recentHistory.length > 10) {
-      recentHistory.splice(0, recentHistory.length - 10);
-    }
-    
-    this.statusHistory.set(printerId, recentHistory);
-    
-    const printer = this.printers.get(printerId);
-    if (printer) {
-      printer.statusHistory = [...recentHistory];
-      this.printers.set(printerId, printer);
-    }
-    
-    this.saveToStorage();
   }
 
   async checkAllPrinters(): Promise<Printer[]> {

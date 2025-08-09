@@ -6,9 +6,8 @@ import { PrinterModal } from './PrinterModal';
 import { StatusFilter } from './StatusFilter';
 import { SearchBar } from './SearchBar';
 import { PrinterSetup } from './PrinterSetup';
-import { ErrorCodePanel } from './ErrorCodePanel';
 import { getStatusConfig } from '../utils/printerUtils';
-import { RefreshCw, Activity, AlertCircle, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Activity, AlertCircle } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
   const [printers, setPrinters] = useState<Printer[]>([]);
@@ -19,7 +18,6 @@ export const Dashboard: React.FC = () => {
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showErrorPanel, setShowErrorPanel] = useState(false);
 
   // Load printers on component mount
   useEffect(() => {
@@ -115,12 +113,7 @@ export const Dashboard: React.FC = () => {
   const errorPrinters = printers.filter(p => 
     [PrinterStatus.ERROR, PrinterStatus.PAPER_JAM, PrinterStatus.CARTRIDGE_ISSUE].includes(p.status)
   ).length;
-  const totalActiveErrors = printers.reduce((sum, p) => 
-    sum + (p.errorCodes || []).filter(e => !e.resolved).length, 0
-  );
-  const criticalErrors = printers.reduce((sum, p) => 
-    sum + (p.errorCodes || []).filter(e => !e.resolved && e.severity === 'critical').length, 0
-  );
+  const printersWithMessages = printers.filter(p => p.currentMessage && p.status !== PrinterStatus.READY).length;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -203,42 +196,19 @@ export const Dashboard: React.FC = () => {
           </div>
           
           <div 
-            className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 cursor-pointer hover:shadow-md transition-shadow"
-            onClick={() => setShowErrorPanel(!showErrorPanel)}
+            className="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
           >
             <div className="flex items-center">
               <div className="p-2 bg-orange-100 rounded-lg">
-                <AlertTriangle className="w-6 h-6 text-orange-600" />
+                <span className="text-orange-600 text-xl">💬</span>
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Error Codes</p>
-                <p className="text-2xl font-semibold text-gray-900">{totalActiveErrors}</p>
-                {criticalErrors > 0 && (
-                  <p className="text-xs text-red-600 font-medium">{criticalErrors} critical</p>
-                )}
+                <p className="text-sm font-medium text-gray-600">With Messages</p>
+                <p className="text-2xl font-semibold text-gray-900">{printersWithMessages}</p>
               </div>
             </div>
           </div>
         </div>
-
-        {/* Global Error Panel */}
-        {showErrorPanel && totalActiveErrors > 0 && (
-          <div className="mb-8">
-            <ErrorCodePanel 
-              errorCodes={printers.flatMap(p => p.errorCodes || []).filter(e => !e.resolved)}
-              onResolveError={(errorCode) => {
-                // Find which printer has this error and resolve it
-                printers.forEach(printer => {
-                  const hasError = printer.errorCodes?.some(e => e.code === errorCode && !e.resolved);
-                  if (hasError) {
-                    printerService.resolveErrorCode(printer.id, errorCode);
-                  }
-                });
-                loadPrinters(); // Refresh the data
-              }}
-            />
-          </div>
-        )}
 
         {/* Search and Filters */}
         {printers.length > 0 && (
@@ -289,23 +259,12 @@ export const Dashboard: React.FC = () => {
         {/* Last Refresh Info */}
         {printers.length > 0 && (
           <div className="mt-8 text-center text-sm text-gray-500">
-            Last refreshed: {lastRefresh.toLocaleTimeString()} • Auto-refresh every 30 seconds • History cleared after 5 minutes
+            Last refreshed: {lastRefresh.toLocaleTimeString()} • Auto-refresh every 30 seconds
             <br />
             <span className="text-xs text-blue-600">
               💡 Tip: The system reads actual printer status messages. If your printer is working fine, it should show "Ready" status.
-              Click on any printer card to see detailed error information and solutions.
+              Current messages are cleared automatically when issues are resolved.
             </span>
-            {totalActiveErrors > 0 && (
-              <>
-                <span className="mx-2">•</span>
-                <button 
-                  onClick={() => setShowErrorPanel(!showErrorPanel)}
-                  className="text-orange-600 hover:text-orange-700 underline"
-                >
-                  {showErrorPanel ? 'Hide' : 'Show'} {totalActiveErrors} active error{totalActiveErrors > 1 ? 's' : ''}
-                </button>
-              </>
-            )}
           </div>
         )}
       </div>
