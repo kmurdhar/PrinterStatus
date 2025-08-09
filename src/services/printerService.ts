@@ -396,9 +396,10 @@ class PrinterService {
         return {
           status: detectedStatus,
           errorCode: this.extractErrorCodeFromXml(xmlDoc)
-          } catch (error) {
+        };
+      }
+    } catch (error) {
       console.error('XML parsing error:', error);
-    }
     }
     
     return null;
@@ -519,16 +520,6 @@ class PrinterService {
     }
     
     return undefined;
-  }
-
-  private extractInkLevels(supplies: any): any {
-    // Removed - no longer needed
-    return null;
-  }
-
-  private extractPaperLevel(data: any): number {
-    // Removed - no longer needed
-    return 0;
   }
 
   private extractInkLevels(supplies: any): any {
