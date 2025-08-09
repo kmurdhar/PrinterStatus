@@ -401,7 +401,6 @@ class PrinterService {
           errorCode: this.extractErrorCodeFromXml(xmlDoc)
         };
       }
-      }
     } catch (error) {
       console.error('XML parsing error:', error);
     }
