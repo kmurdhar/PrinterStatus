@@ -467,12 +467,12 @@ class PrinterService {
       
       // Look for common status indicators in HTML
       const statusKeywords = {
+        paper_out: ['please load plain paper', 'load plain paper', 'please load paper', 'load paper in the printer', 'paper out', 'no paper', 'paper empty', 'out of paper', 'paper low', 'load paper and then click'],
+        loading_paper: ['loading paper', 'paper loading', 'insert paper', 'paper tray', 'refilling'],
+        paper_jam: ['paper jam', 'jam', 'paper stuck', 'paper feed', 'feed error', 'paper path'],
         cartridge_issue: ['install cartridge', 'install black cartridge', 'install ink cartridge', 'install toner cartridge', 'cartridge missing', 'cartridge not detected', 'replace cartridge', 'cartridge error', 'cartridge problem'],
         error: ['door open', 'cover open', 'door is open', 'cover is open', 'close door', 'close cover', 'access door', 'front door', 'rear door', 'top cover', 'scanner cover', 'maintenance door', 'door ajar'],
         printing: ['printing', 'busy', 'processing'],
-        loading_paper: ['loading paper', 'paper loading', 'load paper', 'insert paper', 'paper tray', 'refilling'],
-        paper_jam: ['paper jam', 'jam', 'paper stuck', 'paper feed', 'feed error', 'paper path'],
-        paper_out: ['paper out', 'no paper', 'paper empty', 'out of paper', 'paper low'],
         low_ink: ['low ink', 'low toner', 'ink low', 'toner low', 'replace ink', 'replace toner'],
         ready: ['ready', 'idle', 'online', 'standby', 'waiting', 'available'],
         offline: ['offline', 'disconnected', 'not available']
@@ -480,22 +480,26 @@ class PrinterService {
       
       const bodyText = doc.body?.textContent?.toLowerCase() || '';
       
-      // Check for specific status keywords with priority (errors first, then ready)
+      // Check for specific status keywords with priority (paper issues first, then other errors, then ready)
       for (const [status, keywords] of Object.entries(statusKeywords)) {
         if (keywords.some(keyword => bodyText.includes(keyword))) {
           const matchedKeyword = keywords.find(k => bodyText.includes(k));
           let errorCode = this.extractErrorCodeFromHtml(bodyText);
           
           // Set specific error codes based on detected condition
-          if (status === 'cartridge_issue') {
+          if (status === 'paper_out') {
+            errorCode = errorCode || '41.01'; // Paper size/type mismatch or out
+          } else if (status === 'cartridge_issue') {
             errorCode = errorCode || '10.00'; // Default cartridge error code
           } else if (status === 'error' && matchedKeyword?.includes('door')) {
             errorCode = errorCode || '30.01'; // Door open error code
           }
           
+          console.log(`Detected printer status: ${status}, message: ${matchedKeyword}, from text: ${bodyText.substring(0, 200)}...`);
+          
           return {
             status: this.mapStatusToEnum(status),
-            message: `${matchedKeyword}`,
+            message: matchedKeyword,
             errorCode: this.extractErrorCodeFromHtml(bodyText)
           };
         }
