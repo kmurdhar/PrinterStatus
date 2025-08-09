@@ -1,7 +1,7 @@
 import React from 'react';
 import { Printer } from '../types/printer';
-import { getStatusConfig, formatLastUpdated, getInkLevelColor, getPaperLevelColor } from '../utils/printerUtils';
-import { Printer as PrinterIcon, MapPin, Clock, Droplets, FileText, AlertTriangle } from 'lucide-react';
+import { getStatusConfig, formatLastUpdated } from '../utils/printerUtils';
+import { Printer as PrinterIcon, MapPin, Clock, AlertTriangle } from 'lucide-react';
 
 interface PrinterCardProps {
   printer: Printer;
@@ -41,7 +41,7 @@ export const PrinterCard: React.FC<PrinterCardProps> = ({ printer, onClick }) =>
           </div>
         </div>
 
-        {/* Error Indicators */}
+        {/* Printer Messages */}
         {activeErrors.length > 0 && (
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2">
@@ -77,47 +77,6 @@ export const PrinterCard: React.FC<PrinterCardProps> = ({ printer, onClick }) =>
             )}
           </div>
         )}
-
-        {/* Ink Levels */}
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center text-sm text-gray-600">
-              <Droplets className="w-4 h-4 mr-1" />
-              Ink Levels
-            </div>
-          </div>
-          <div className="grid grid-cols-4 gap-2">
-            {Object.entries(printer.inkLevels).map(([color, level]) => (
-              <div key={color} className="text-center">
-                <div className="w-full bg-gray-200 rounded-full h-2 mb-1">
-                  <div 
-                    className={`h-2 rounded-full transition-all duration-300 ${getInkLevelColor(level)}`}
-                    style={{ width: `${level}%` }}
-                  ></div>
-                </div>
-                <span className="text-xs text-gray-500 capitalize">{color}</span>
-                <div className="text-xs font-medium text-gray-700">{level}%</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Paper Level */}
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center text-sm text-gray-600">
-              <FileText className="w-4 h-4 mr-1" />
-              Paper Level
-            </div>
-            <span className="text-sm font-medium text-gray-700">{printer.paperLevel}%</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div 
-              className={`h-2 rounded-full transition-all duration-300 ${getPaperLevelColor(printer.paperLevel)}`}
-              style={{ width: `${printer.paperLevel}%` }}
-            ></div>
-          </div>
-        </div>
 
         {/* Last Updated */}
         <div className="flex items-center text-xs text-gray-500 pt-2 border-t border-gray-100">

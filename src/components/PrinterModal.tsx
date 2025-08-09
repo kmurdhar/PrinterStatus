@@ -1,7 +1,7 @@
 import React from 'react';
 import { Printer, PrinterStatus } from '../types/printer';
-import { getStatusConfig, formatLastUpdated, getInkLevelColor, getPaperLevelColor } from '../utils/printerUtils';
-import { X, Printer as PrinterIcon, MapPin, Monitor, Clock, Droplets, FileText, History, AlertTriangle } from 'lucide-react';
+import { getStatusConfig, formatLastUpdated } from '../utils/printerUtils';
+import { X, Printer as PrinterIcon, MapPin, Monitor, Clock, AlertTriangle } from 'lucide-react';
 import { ErrorCodePanel } from './ErrorCodePanel';
 import { printerService } from '../services/printerService';
 
@@ -70,90 +70,6 @@ export const PrinterModal: React.FC<PrinterModalProps> = ({ printer, isOpen, onC
               <Monitor className="w-4 h-4" />
               <span>IP Address: {printer.ipAddress}</span>
             </div>
-          </div>
-
-          {/* Ink Levels */}
-          <div className="space-y-4">
-            <label className="text-sm font-medium text-gray-600 flex items-center">
-              <Droplets className="w-4 h-4 mr-2" />
-              Ink Levels
-            </label>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {Object.entries(printer.inkLevels).map(([color, level]) => (
-                <div key={color} className="text-center p-4 bg-gray-50 rounded-lg">
-                  <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
-                    <div 
-                      className={`h-3 rounded-full transition-all duration-300 ${getInkLevelColor(level)}`}
-                      style={{ width: `${level}%` }}
-                    ></div>
-                  </div>
-                  <span className="text-sm font-medium text-gray-700 capitalize">{color}</span>
-                  <div className="text-lg font-bold text-gray-900">{level}%</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Paper Level */}
-          <div className="space-y-4">
-            <label className="text-sm font-medium text-gray-600 flex items-center">
-              <FileText className="w-4 h-4 mr-2" />
-              Paper Level
-            </label>
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-gray-600">Paper Tray</span>
-                <span className="text-lg font-bold text-gray-900">{printer.paperLevel}%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-3">
-                <div 
-                  className={`h-3 rounded-full transition-all duration-300 ${getPaperLevelColor(printer.paperLevel)}`}
-                  style={{ width: `${printer.paperLevel}%` }}
-                ></div>
-              </div>
-            </div>
-          </div>
-
-          {/* Status History */}
-          <div className="space-y-4">
-            <label className="text-sm font-medium text-gray-600 flex items-center">
-              <History className="w-4 h-4 mr-2" />
-              Recent Status History (Last 5 minutes)
-            </label>
-            {printer.statusHistory.length === 0 ? (
-              <div className="text-center py-4 text-gray-500 bg-gray-50 rounded-lg">
-                No recent status changes in the last 5 minutes
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {printer.statusHistory.slice(-10).reverse().map((entry, index) => {
-                const entryConfig = getStatusConfig(entry.status);
-                return (
-                  <div key={index} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                    <span className="text-lg">{entryConfig.icon}</span>
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2">
-                        <span className={`text-sm font-medium ${entryConfig.color}`}>
-                          {entryConfig.label}
-                        </span>
-                        {entry.errorCode && (
-                          <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
-                            {entry.errorCode}
-                          </span>
-                        )}
-                        <span className="text-xs text-gray-500">
-                          {entry.timestamp.toLocaleString()}
-                        </span>
-                      </div>
-                      {entry.message && (
-                        <p className="text-sm text-gray-600 mt-1">{entry.message}</p>
-                      )}
-                    </div>
-                  </div>
-                );
-                })}
-              </div>
-            )}
           </div>
 
           {/* Error Codes */}
