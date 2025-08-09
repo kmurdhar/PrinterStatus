@@ -49,6 +49,11 @@ export const PrinterCard: React.FC<PrinterCardProps> = ({ printer, onClick }) =>
                 <AlertTriangle className="w-4 h-4 mr-1" />
                 Current Message
               </div>
+              {printer.currentErrorCode && (
+                <span className="text-xs text-red-500 font-mono">
+                  Code: {printer.currentErrorCode}
+                </span>
+              )}
             </div>
             <span className="px-2 py-1 text-xs rounded bg-orange-100 text-orange-800 border border-orange-200">
               {printer.currentMessage}

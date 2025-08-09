@@ -484,15 +484,19 @@ class PrinterService {
       for (const [status, keywords] of Object.entries(statusKeywords)) {
         if (keywords.some(keyword => bodyText.includes(keyword))) {
           const matchedKeyword = keywords.find(k => bodyText.includes(k));
-          let errorCode = this.extractErrorCodeFromHtml(bodyText);
+          let errorCode = this.extractErrorCodeFromText(bodyText);
           
           // Set specific error codes based on detected condition
           if (status === 'paper_out') {
-            errorCode = errorCode || '41.01'; // Paper size/type mismatch or out
+            errorCode = errorCode || '41.01';
           } else if (status === 'cartridge_issue') {
-            errorCode = errorCode || '10.00'; // Default cartridge error code
+            errorCode = errorCode || '10.00';
           } else if (status === 'error' && matchedKeyword?.includes('door')) {
-            errorCode = errorCode || '30.01'; // Door open error code
+            errorCode = errorCode || '30.01';
+          } else if (status === 'paper_jam') {
+            errorCode = errorCode || '13.01';
+          } else if (status === 'loading_paper') {
+            errorCode = errorCode || '41.03';
           }
           
           console.log(`Detected printer status: ${status}, message: ${matchedKeyword}, from text: ${bodyText.substring(0, 200)}...`);
@@ -500,7 +504,7 @@ class PrinterService {
           return {
             status: this.mapStatusToEnum(status),
             message: matchedKeyword,
-            errorCode: this.extractErrorCodeFromHtml(bodyText)
+            errorCode: errorCode
           };
         }
       }
@@ -562,14 +566,19 @@ class PrinterService {
   }
 
   private extractErrorCodeFromText(text: string): string | undefined {
-    // Simple error code extraction patterns
+    // Enhanced error code extraction patterns
     const patterns = [
       /\b(\d{2}\.\d{2})\b/,           // XX.XX format
       /\b(\d{2}\.\d{2}\.\d{2})\b/,   // XX.XX.XX format
       /\b([EW]-\d{2})\b/,            // E-XX or W-XX format
       /\b(E\d{2})\b/,                // EXX format
+      /\b(\d{2}[A-F]\d)\b/,          // XXFx format (HP)
       /\bError\s+(\d+)\b/i,          // Error XXX format
-      /\bCode\s+([A-Z0-9\-\.]+)\b/i  // Code XXX format
+      /\bCode\s+([A-Z0-9\-\.]+)\b/i, // Code XXX format
+      /\bStatus\s+(\d{2}\.\d{2})\b/i, // Status XX.XX format
+      /\bAlert\s+(\d{2}\.\d{2})\b/i,  // Alert XX.XX format
+      /\b(\d{3,4})\s*error\b/i,       // XXX error format
+      /\berror\s*(\d{3,4})\b/i        // error XXX format
     ];
     
     for (const pattern of patterns) {

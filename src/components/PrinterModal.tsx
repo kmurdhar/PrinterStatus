@@ -59,12 +59,16 @@ export const PrinterModal: React.FC<PrinterModalProps> = ({ printer, isOpen, onC
           {/* Current Message */}
           {printer.currentMessage && printer.status !== PrinterStatus.READY && (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-600">Current Message</label>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-600">Current Message</label>
+                {printer.currentErrorCode && (
+                  <span className="text-sm font-mono text-red-600 bg-red-50 px-2 py-1 rounded">
+                    Error Code: {printer.currentErrorCode}
+                  </span>
+                )}
+              </div>
               <div className="px-4 py-3 bg-orange-50 border border-orange-200 rounded-lg">
                 <p className="text-orange-800 font-medium">{printer.currentMessage}</p>
-                {printer.currentErrorCode && (
-                  <p className="text-sm text-orange-600 mt-1">Error Code: {printer.currentErrorCode}</p>
-                )}
               </div>
             </div>
           )}
