@@ -398,10 +398,10 @@ class PrinterService {
         };
           } catch (error) {
       console.error('XML parsing error:', error);
-    }
-    }
-    
     return null;
+    } catch (error) {
+      console.error('XML parsing error:', error);
+    }
   }
 
   // Parse HTML status response
