@@ -2,6 +2,7 @@ import React from 'react';
 import { Printer } from '../types/printer';
 import { getStatusConfig, formatLastUpdated } from '../utils/printerUtils';
 import { Printer as PrinterIcon, MapPin, Clock, AlertTriangle } from 'lucide-react';
+import { PrinterStatus } from '../types/printer';
 
 interface PrinterCardProps {
   printer: Printer;

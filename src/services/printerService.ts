@@ -395,11 +395,8 @@ class PrinterService {
         
         return {
           status: detectedStatus,
-          inkLevels: this.extractInkLevels(null),
-          paperLevel: this.extractPaperLevel(null),
-          message: alertMessages[0] || statusText,
           errorCode: this.extractErrorCodeFromXml(xmlDoc)
-        };
+          errorCode: this.extractErrorCodeFromXml(xmlDoc)
       }
     } catch (error) {
       console.error('XML parsing error:', error);
@@ -490,24 +487,6 @@ class PrinterService {
   }
 
   // Extract error codes from various response formats
-  private extractErrorCode(data: any, alerts?: any[]): string | undefined {
-    // Check direct error code fields
-    if (data.errorCode) return data.errorCode;
-    if (data.error_code) return data.error_code;
-    if (data.code) return data.code;
-    
-    // Check in alerts/messages
-    if (alerts && alerts.length > 0) {
-      for (const alert of alerts) {
-        const message = alert.message || alert.text || alert.description || '';
-        const codes = parseErrorFromText(message);
-        if (codes.length > 0) return codes[0];
-      }
-    }
-    
-    return undefined;
-  }
-
   private extractErrorCodeFromXml(xmlDoc: Document): string | undefined {
     const errorElements = xmlDoc.querySelectorAll('ErrorCode, Error, Code, AlertCode');
     if (errorElements.length > 0) {
@@ -521,8 +500,36 @@ class PrinterService {
   }
 
   private extractErrorCodeFromHtml(text: string): string | undefined {
-    const codes = parseErrorFromText(text);
-    return codes.length > 0 ? codes[0] : undefined;
+    return this.extractErrorCodeFromText(text);
+  }
+
+  private extractErrorCodeFromText(text: string): string | undefined {
+    // Simple error code extraction patterns
+    const patterns = [
+      /\b(\d{2}\.\d{2})\b/,           // XX.XX format
+      /\b(\d{2}\.\d{2}\.\d{2})\b/,   // XX.XX.XX format
+      /\b([EW]-\d{2})\b/,            // E-XX or W-XX format
+      /\b(E\d{2})\b/,                // EXX format
+      /\bError\s+(\d+)\b/i,          // Error XXX format
+      /\bCode\s+([A-Z0-9\-\.]+)\b/i  // Code XXX format
+    ];
+    
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) return match[1];
+    }
+    
+    return undefined;
+  }
+
+  private extractInkLevels(supplies: any): any {
+    // Removed - no longer needed
+    return null;
+  }
+
+  private extractPaperLevel(data: any): number {
+    // Removed - no longer needed
+    return 0;
   }
 
   private extractInkLevels(supplies: any): any {
