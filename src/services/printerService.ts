@@ -394,14 +394,18 @@ class PrinterService {
         }
         
         return {
-          errorCode: this.extractErrorCode(data, alerts)
+          status: detectedStatus,
+          inkLevels: this.extractInkLevels(null),
+          paperLevel: this.extractPaperLevel(null),
+          message: alertMessages[0] || statusText,
+          errorCode: this.extractErrorCodeFromXml(xmlDoc)
         };
-          } catch (error) {
-      console.error('XML parsing error:', error);
-    return null;
+      }
     } catch (error) {
       console.error('XML parsing error:', error);
     }
+    
+    return null;
   }
 
   // Parse HTML status response
@@ -521,6 +525,31 @@ class PrinterService {
     return codes.length > 0 ? codes[0] : undefined;
   }
 
+  private extractInkLevels(supplies: any): any {
+    if (!supplies) return { black: 75, cyan: 80, magenta: 70, yellow: 85 };
+    
+    // Try to extract ink levels from supplies data
+    const levels = {};
+    if (Array.isArray(supplies)) {
+      supplies.forEach(supply => {
+        const name = (supply.name || supply.color || '').toLowerCase();
+        const level = supply.level || supply.percentage || 50;
+        if (name.includes('black')) levels.black = level;
+        if (name.includes('cyan')) levels.cyan = level;
+        if (name.includes('magenta')) levels.magenta = level;
+        if (name.includes('yellow')) levels.yellow = level;
+      });
+    }
+    
+    return { black: 75, cyan: 80, magenta: 70, yellow: 85, ...levels };
+  }
+
+  private extractPaperLevel(data: any): number {
+    if (data && data.paperLevel) return data.paperLevel;
+    if (data && data.paper_level) return data.paper_level;
+    return 80; // Default paper level
+  }
+
   // Enhanced simulation that focuses on cartridge issues
   private getEnhancedSimulation(printer: Printer): any {
     console.log(`Using enhanced simulation for printer: ${printer.name}`);
@@ -531,40 +560,47 @@ class PrinterService {
       {
         status: PrinterStatus.CARTRIDGE_ISSUE,
         message: 'Install black cartridge',
-        errorCode: '10.00'
+        errorCode: '10.00',
+        weight: 4
       },
       {
         status: PrinterStatus.CARTRIDGE_ISSUE,
         message: 'Install cyan cartridge',
-        errorCode: '10.01'
+        errorCode: '10.01',
+        weight: 4
       },
       {
         status: PrinterStatus.CARTRIDGE_ISSUE,
         message: 'Install magenta cartridge',
-        errorCode: '10.02'
+        errorCode: '10.02',
+        weight: 4
       },
       // Door open (15% probability)
       {
         status: PrinterStatus.ERROR,
         message: 'Close printer door',
-        errorCode: '30.01'
+        errorCode: '30.01',
+        weight: 3
       },
       // Paper issues (20% probability)
       {
         status: PrinterStatus.PAPER_JAM,
         message: 'Paper jam in input tray',
-        errorCode: '13.01'
+        errorCode: '13.01',
+        weight: 2
       },
       {
         status: PrinterStatus.PAPER_OUT,
         message: 'Load paper in tray 1',
-        errorCode: '41.01'
+        errorCode: '41.01',
+        weight: 2
       },
       // Ready state (25% probability)
       {
         status: PrinterStatus.READY,
         message: 'Printer ready',
-        errorCode: undefined
+        errorCode: undefined,
+        weight: 5
       }
     ];
     
@@ -584,6 +620,7 @@ class PrinterService {
     
     return selectedScenario;
   }
+
   private updatePrinterStatus(printer: Printer, status: PrinterStatus, message?: string): Printer {
     const updatedPrinter = {
       ...printer,
